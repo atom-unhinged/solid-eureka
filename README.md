@@ -1,5 +1,7 @@
 # 🚧 OTM Book 7 — Ontario Work Zone Planner
 
+![Atom](atom-logo.svg)
+
 **[▶ Open the App](https://atom-unhinged.github.io/solid-eureka/)**
 
 An interactive, offline-ready web app for planning temporary traffic control in Ontario, based on the **Ontario Traffic Manual Book 7: Temporary Conditions (April 2022 Edition)**.
@@ -119,5 +121,4 @@ This tool is an independent planning aid and is not affiliated with or endorsed 
 
 ## Credits
 
-Designed and built in collaboration with **[Claude](https://claude.ai)** (Anthropic) — who wrote every line of code, debugged every edge case, and never once complained about being asked to fix the dropdown for the fourth time.
-
+An **[Atom Tools](https://atom-unhinged.github.io/solid-eureka/)** project — designed and built in collaboration with **[Claude](https://claude.ai)** (Anthropic), who wrote every line of code, debugged every edge case, and never once complained about being asked to fix the dropdown for the fourth time.
