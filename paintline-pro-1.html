@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PaintLine Pro — Parking & Road Paint Estimator</title>
+<!--
+  CDN Libraries:
+  - Leaflet.js 1.9.4      : Interactive maps (BSD-2-Clause)
+  - Leaflet.draw 1.0.4    : Drawing tools for polygons / polylines
+  - Turf.js 6.5.0         : Geospatial calculations (area, length)
+  - Google Fonts          : Oswald + Source Code Pro + Inter
+  - Overpass API          : Free OSM data query (no key required)
+  - Nominatim             : Free OSM geocoding (no key required)
+-->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Code+Pro:wght@400;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink:#0d0e12;--ink-soft:#1c1e26;--steel:#252833;--panel:#1a1c23;
+  --border:#2e3140;--muted:#4a4f66;--text:#c8ccde;--text-dim:#6b7194;
+  --accent:#f5c842;--accent2:#e87f3a;--green:#4ade80;--red:#f87171;--blue:#60a5fa;
+  --sw:320px;--th:52px;--r:6px;
+  --fh:'Oswald',sans-serif;--fb:'Inter',sans-serif;--fm:'Source Code Pro',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--fb);background:var(--ink);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+
+/* TOPBAR */
+#topbar{height:var(--th);background:var(--ink-soft);border-bottom:2px solid var(--accent);display:flex;align-items:center;padding:0 14px;gap:10px;z-index:1000;flex-shrink:0;overflow-x:auto}
+#topbar::-webkit-scrollbar{display:none}
+.brand{font-family:var(--fh);font-size:19px;font-weight:700;letter-spacing:2px;color:var(--accent);text-transform:uppercase;white-space:nowrap}
+.brand span{color:var(--text);font-weight:400}
+.topbar-spacer{flex:1;min-width:8px}
+.tb-btn{font-family:var(--fh);font-size:11px;letter-spacing:1px;font-weight:600;padding:5px 12px;border:1px solid var(--border);background:transparent;color:var(--text-dim);cursor:pointer;border-radius:var(--r);text-transform:uppercase;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.tb-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.tb-btn.active{background:var(--accent);color:var(--ink);border-color:var(--accent)}
+.tb-btn.active:hover{background:#ffd966}
+#search-wrap{display:flex;align-items:center;gap:6px;background:var(--steel);border:1px solid var(--border);border-radius:var(--r);padding:0 10px;height:32px;flex-shrink:0}
+#search-input{background:transparent;border:none;outline:none;color:var(--text);font-family:var(--fb);font-size:13px;width:180px}
+#search-input::placeholder{color:var(--text-dim)}
+#search-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:15px;padding:0}
+
+/* MAP */
+#main{display:flex;flex:1;overflow:hidden}
+#map{flex:1;background:var(--ink)}
+#place-banner{display:none;position:absolute;top:60px;left:50%;transform:translateX(-50%);z-index:800;background:var(--accent);color:var(--ink);font-family:var(--fh);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:8px 20px;border-radius:20px;box-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:none}
+.leaflet-draw-toolbar a,.leaflet-bar a{background-color:var(--steel)!important;border-color:var(--border)!important;color:var(--text)!important}
+.leaflet-draw-toolbar a:hover,.leaflet-bar a:hover{background-color:var(--accent)!important;color:var(--ink)!important}
+.leaflet-touch .leaflet-control-zoom a{color:var(--text)!important}
+#map.mode-detect{cursor:cell!important}
+#map.mode-stalls{cursor:crosshair!important}
+
+/* SIDEBAR */
+#sidebar{width:var(--sw);background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.s-head{padding:11px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.s-head h2{font-family:var(--fh);font-size:12px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase}
+.badge{background:var(--accent);color:var(--ink);font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px}
+.s-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.s-tab{flex:1;font-family:var(--fh);font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:9px 4px;background:transparent;border:none;color:var(--text-dim);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.s-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.s-tab:hover:not(.active){color:var(--text)}
+.s-panel{display:none;flex:1;overflow-y:auto;padding:12px 12px 24px;flex-direction:column;gap:11px}
+.s-panel.active{display:flex}
+.s-panel::-webkit-scrollbar{width:3px}
+.s-panel::-webkit-scrollbar-thumb{background:var(--muted);border-radius:2px}
+
+/* CARDS */
+.card{background:var(--steel);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.card-hd{font-family:var(--fh);font-size:10px;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase;padding:8px 11px 7px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0}
+.card-bd{padding:10px;display:flex;flex-direction:column;gap:8px}
+
+/* STAT GRID */
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sb{background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:8px;display:flex;flex-direction:column;gap:2px}
+.sb.wide{grid-column:1/-1}
+.sb .lbl{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px}
+.sb .val{font-family:var(--fm);font-size:16px;font-weight:600;color:var(--accent);line-height:1.2}
+.sb .unt{font-family:var(--fm);font-size:9px;color:var(--text-dim)}
+.sb.hi .val{color:var(--green)}
+.sb.warn .val{color:var(--accent2)}
+.sb.blue .val{color:var(--blue)}
+
+/* FORMS */
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px}
+.field input,.field select{background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:7px 9px;color:var(--text);font-family:var(--fb);font-size:13px;outline:none;transition:border-color .15s;width:100%}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.field select option{background:var(--ink-soft)}
+.fr2{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+
+/* BUTTONS */
+.btn{font-family:var(--fh);font-size:11px;letter-spacing:1px;font-weight:600;text-transform:uppercase;padding:8px 11px;border:1px solid;border-radius:var(--r);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px}
+.btn-y{background:var(--accent);border-color:var(--accent);color:var(--ink)}.btn-y:hover{background:#ffd966}
+.btn-g{background:var(--green);border-color:var(--green);color:var(--ink)}.btn-g:hover{opacity:.85}
+.btn-r{background:transparent;border-color:var(--red);color:var(--red)}.btn-r:hover{background:var(--red);color:var(--ink)}
+.btn-o{background:transparent;border-color:var(--border);color:var(--text-dim)}.btn-o:hover{border-color:var(--text-dim);color:var(--text)}
+.btn-full{width:100%}
+.btn-sm{padding:5px 9px;font-size:10px}
+
+/* ANGLE PICKER */
+.ang-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.ang-btn{background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:8px 5px;color:var(--text-dim);cursor:pointer;font-size:10px;font-family:var(--fh);letter-spacing:1px;text-align:center;transition:all .15s;display:flex;flex-direction:column;align-items:center;gap:3px}
+.ang-btn .ai{font-size:16px;line-height:1}
+.ang-btn:hover,.ang-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(245,200,66,.08)}
+
+/* LAYER ITEMS */
+.ll{display:flex;flex-direction:column;gap:4px}
+.li{display:flex;align-items:center;gap:7px;background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:6px 8px;font-size:11px}
+.li-sw{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.li-name{flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.li-meta{font-family:var(--fm);font-size:9px;color:var(--text-dim);white-space:nowrap}
+.li-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:0 0 0 4px;transition:color .15s}
+.li-del:hover{color:var(--red)}
+
+/* INFO BOX */
+.ibox{background:rgba(245,200,66,.07);border:1px solid rgba(245,200,66,.18);border-radius:var(--r);padding:9px 11px;font-size:12px;color:#b0b6cc;line-height:1.75}
+.ibox strong{color:var(--accent)}
+hr.div{border:none;border-top:1px solid var(--border);margin:1px 0}
+
+/* FORMULA */
+.formula{background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:9px 10px;font-family:var(--fm);font-size:10px;color:#7a82a8;line-height:1.85;white-space:pre;overflow-x:auto}
+
+/* COMING SOON */
+.cs{background:repeating-linear-gradient(45deg,rgba(245,200,66,.03),rgba(245,200,66,.03) 8px,transparent 8px,transparent 16px);border:1px dashed rgba(245,200,66,.2);border-radius:var(--r);padding:11px;text-align:center;font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase}
+.cs strong{color:var(--accent);display:block;margin-bottom:3px;font-size:11px}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(70px);background:var(--steel);border:1px solid var(--border);border-radius:var(--r);padding:9px 16px;font-size:12px;color:var(--text);z-index:9999;transition:transform .28s cubic-bezier(.34,1.56,.64,1);pointer-events:none;white-space:nowrap}
+#toast.show{transform:translateX(-50%) translateY(0)}
+
+@media(max-width:680px){
+  #sidebar{width:100%;position:absolute;bottom:0;left:0;height:52vh;border-left:none;border-top:2px solid var(--accent);z-index:500}
+  #search-input{width:110px}
+  .brand{font-size:15px}
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="brand">Paint<span>Line</span> Pro</div>
+  <div class="topbar-spacer"></div>
+  <button class="tb-btn" id="detect-btn" title="Click a parking lot on the map to auto-detect its outline">🅿 Detect Lot</button>
+  <div id="search-wrap">
+    <input type="text" id="search-input" placeholder="Search address…"/>
+    <button id="search-btn">⌖</button>
+  </div>
+  <button class="tb-btn" id="tile-btn">🛰 Satellite</button>
+</div>
+
+<div id="main">
+  <div id="map">
+    <div id="place-banner">Placement mode — click map to add row · Esc to stop</div>
+  </div>
+
+  <div id="sidebar">
+    <div class="s-head">
+      <h2>Estimator</h2>
+      <span class="badge">Stage 1–2</span>
+    </div>
+    <div class="s-tabs">
+      <button class="s-tab active" data-tab="tab-lot">📐 Lot</button>
+      <button class="s-tab"        data-tab="tab-stalls">🚗 Stalls</button>
+      <button class="s-tab"        data-tab="tab-paint">🎨 Paint</button>
+      <button class="s-tab"        data-tab="tab-layers">🗂 Layers</button>
+    </div>
+
+    <!-- TAB: LOT -->
+    <div class="s-panel active" id="tab-lot">
+      <div class="ibox">
+        <strong>Auto-detect:</strong> Click <strong>🅿 Detect Lot</strong> in the toolbar then click any parking lot — OSM will outline it.<br><br>
+        <strong>Manual:</strong> Use the polygon tool (pentagon icon, map toolbar). Click each corner, double-click to finish.
+      </div>
+      <div class="card" id="osm-card" style="display:none">
+        <div class="card-hd"><span class="dot" style="background:var(--blue)"></span>OSM Detection</div>
+        <div class="card-bd"><div id="osm-msg" style="font-size:11px;line-height:1.7;white-space:pre-line"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot"></span>Lot Measurements</div>
+        <div class="card-bd">
+          <div class="sg">
+            <div class="sb wide"><div class="lbl">Total Area</div><div class="val" id="r-sqft">—</div><div class="unt">sq ft</div></div>
+            <div class="sb"><div class="lbl">Sq Meters</div><div class="val" id="r-sqm" style="font-size:13px">—</div><div class="unt">m²</div></div>
+            <div class="sb"><div class="lbl">Acres</div><div class="val" id="r-acres" style="font-size:13px">—</div><div class="unt">ac</div></div>
+            <div class="sb wide warn"><div class="lbl">Perimeter</div><div class="val" id="r-perim" style="font-size:13px">—</div><div class="unt">linear ft</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: STALLS -->
+    <div class="s-panel" id="tab-stalls">
+      <div class="ibox">
+        <strong>Place stall rows:</strong> Set angle + dimensions, click <strong>Activate Placement</strong>, then click the map. Each click = one row. Press <strong>Esc</strong> to stop.
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--accent2)"></span>Parking Angle</div>
+        <div class="card-bd">
+          <div class="ang-grid">
+            <button class="ang-btn active" data-angle="90"><span class="ai">⬆</span>90° Standard</button>
+            <button class="ang-btn"        data-angle="60"><span class="ai">↗</span>60° Angled</button>
+            <button class="ang-btn"        data-angle="45"><span class="ai">↗</span>45° Diagonal</button>
+            <button class="ang-btn"        data-angle="0" ><span class="ai">➡</span>0° Parallel</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot"></span>Stall Dimensions</div>
+        <div class="card-bd">
+          <div class="fr2">
+            <div class="field"><label>Width (ft)</label><input type="number" id="stall-w" value="9" min="7" max="14" step="0.5"/></div>
+            <div class="field"><label>Depth (ft)</label><input type="number" id="stall-d" value="18" min="14" max="24" step="0.5"/></div>
+          </div>
+          <div class="fr2">
+            <div class="field"><label>Per Row</label><input type="number" id="stalls-per-row" value="8" min="1" max="40" step="1"/></div>
+            <div class="field"><label>Row Rotation °</label><input type="number" id="row-rotation" value="0" min="-180" max="180" step="5"/></div>
+          </div>
+          <div class="field"><label>Aisle Width (ft)</label><input type="number" id="aisle-width" value="24" min="12" max="40" step="1"/></div>
+          <div class="field"><label>Row Label</label><input type="text" id="row-label" placeholder="Row A, North Section…"/></div>
+          <div style="background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:7px 9px;font-size:11px;color:var(--text-dim)">
+            <span id="stall-dim" style="color:var(--text);font-family:var(--fm)">9×18 ft</span>
+            &nbsp;·&nbsp; <span id="stall-area-ft" style="color:var(--accent);font-family:var(--fm)">162 ft²</span>
+            &nbsp;·&nbsp; Row: <span id="stall-row-info" style="color:var(--accent2);font-family:var(--fm)">8 stalls / 234 line ft</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--green)"></span>Placement</div>
+        <div class="card-bd">
+          <button class="btn btn-g btn-full" id="place-btn">🚗 Activate Placement Mode</button>
+          <button class="btn btn-r btn-full" id="cancel-place-btn" style="display:none">✕ Stop Placing (Esc)</button>
+          <hr class="div"/>
+          <button class="btn btn-o btn-full btn-sm" id="clear-stalls-btn">🗑 Clear All Stall Rows</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--blue)"></span>Stall Summary</div>
+        <div class="card-bd">
+          <div class="sg">
+            <div class="sb hi"><div class="lbl">Total Stalls</div><div class="val" id="s-stalls">0</div><div class="unt">spaces</div></div>
+            <div class="sb blue"><div class="lbl">Rows</div><div class="val" id="s-rows">0</div><div class="unt">placed</div></div>
+            <div class="sb wide warn"><div class="lbl">Total Stall Line Footage</div><div class="val" id="s-lineft">0</div><div class="unt">linear ft — dividers + front stripes</div></div>
+            <div class="sb wide"><div class="lbl">Est. Aisle Area</div><div class="val" id="s-aisle" style="font-size:13px">—</div><div class="unt">sq ft (row span × aisle width)</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: PAINT -->
+    <div class="s-panel" id="tab-paint">
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--accent2)"></span>Paint Specs</div>
+        <div class="card-bd">
+          <div class="field">
+            <label>Paint Type</label>
+            <select id="paint-type">
+              <option value="latex"  data-cov="320">Water-Based Latex (320 ft²/gal)</option>
+              <option value="oil"    data-cov="280">Oil-Based Alkyd (280 ft²/gal)</option>
+              <option value="epoxy"  data-cov="200">Epoxy 2-Part (200 ft²/gal)</option>
+              <option value="thermo" data-cov="100">Thermoplastic (100 ft²/gal)</option>
+            </select>
+          </div>
+          <div class="fr2">
+            <div class="field"><label>Line Width (in)</label><input type="number" id="line-width" value="4" min="1" max="48" step="0.5"/></div>
+            <div class="field"><label>Coverage (ft²/gal)</label><input type="number" id="coverage-rate" value="320" min="50" max="1000" step="10"/></div>
+          </div>
+          <div class="fr2">
+            <div class="field"><label>Waste (%)</label><input type="number" id="waste-pct" value="10" min="0" max="50" step="1"/></div>
+            <div class="field"><label>Coats</label><input type="number" id="coats" value="1" min="1" max="4" step="1"/></div>
+          </div>
+          <div class="field">
+            <label>Estimate Source</label>
+            <select id="estimate-mode">
+              <option value="auto">Auto (best available)</option>
+              <option value="stalls">Stall Lines only</option>
+              <option value="perimeter">Lot Perimeter</option>
+              <option value="full">Full Surface Coat</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--green)"></span>Paint Estimate</div>
+        <div class="card-bd">
+          <div class="sg">
+            <div class="sb wide hi"><div class="lbl">Gallons Required</div><div class="val" id="r-gallons">—</div><div class="unt">incl. waste + coats</div></div>
+            <div class="sb warn"><div class="lbl">Linear Ft Painted</div><div class="val" id="r-linear" style="font-size:12px">—</div><div class="unt">ft</div></div>
+            <div class="sb"><div class="lbl">Paint Area</div><div class="val" id="r-paint-area" style="font-size:12px">—</div><div class="unt">ft²</div></div>
+          </div>
+          <div class="formula" id="r-formula">Draw a lot or place stalls, then open this tab.</div>
+          <button class="btn btn-y btn-full" id="recalc-btn">↻ Recalculate</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: LAYERS -->
+    <div class="s-panel" id="tab-layers">
+      <div class="card">
+        <div class="card-hd"><span class="dot"></span>Lot Shapes <span id="shape-count" style="margin-left:auto;font-size:9px;color:var(--text-dim)">0</span></div>
+        <div class="card-bd" style="padding:8px">
+          <div class="ll" id="shape-list"><div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No shapes yet.</div></div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn btn-r btn-sm btn-full" id="clear-shapes-btn">✕ Clear</button>
+            <button class="btn btn-o btn-sm btn-full" id="save-btn">💾 Save</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--accent2)"></span>Stall Rows <span id="stall-count" style="margin-left:auto;font-size:9px;color:var(--text-dim)">0</span></div>
+        <div class="card-bd" style="padding:8px">
+          <div class="ll" id="stall-list"><div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No rows placed.</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--blue)"></span>Project</div>
+        <div class="card-bd">
+          <div class="fr2">
+            <button class="btn btn-o btn-sm" id="load-btn">📂 Load</button>
+            <button class="btn btn-o btn-sm" id="export-btn">⬆ Export</button>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim)">Auto-saved on every change.</div>
+        </div>
+      </div>
+      <div class="cs"><strong>🛣 Roadway & Highway Mode — Stage 4</strong>Lane polylines · MUTCD dash presets · dash counters</div>
+    </div>
+
+  </div><!-- /sidebar -->
+</div><!-- /main -->
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   PaintLine Pro — Stage 1 + 2
+   ═══════════════════════════════════════════════════════════════
+
+   DATA MODEL
+   ──────────
+   shapes[]  { id, type, label, color, areaM2, perimM, layer }
+   stallRows[]  { id, label, color, angle, count, stallW, stallD,
+                  rowRotation, aisleWidth, lineFt,
+                  centerLat, centerLng,   ← rebuild geometry on load
+                  group }
+
+   PAINT ENGINE  (reusable Stage 3+)
+   calcPaint(linearFt, widthIn, coverage, wastePct, coats)
+     → { paintAreaSqFt, rawGallons, totalGallons }
+
+   STALL LINE FOOTAGE  (industry minimum, fresh stripe job)
+   (N+1) vertical dividers × stallDepth  +  N × stallWidth (front stripe)
+   Back stripe omitted — typically abutted against curb or not repainted.
+   ═══════════════════════════════════════════════════════════════ */
+
+// ─── CONSTANTS ───────────────────────────────────────────────
+const M2_SQFT  = 10.7639;
+const M_FT     = 3.28084;
+const FT_M     = 0.3048;
+const M2_ACRES = 0.000247105;
+const PALETTE  = ['#f5c842','#e87f3a','#4ade80','#60a5fa','#f472b6','#a78bfa','#fb923c','#34d399'];
+
+// ─── STATE ───────────────────────────────────────────────────
+let shapes    = [];
+let stallRows = [];
+let _shapeId  = 0, _stallId = 0, _colorIdx = 0;
+let _mode     = 'idle'; // 'idle' | 'detect' | 'stalls'
+let _angle    = 90;
+
+// ─── MAP INIT ────────────────────────────────────────────────
+const map = L.map('map', { center:[43.653,-79.383], zoom:17, zoomControl:false });
+L.control.zoom({ position:'topleft' }).addTo(map);
+
+const tileOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'© <a href="https://openstreetmap.org">OpenStreetMap</a>',maxZoom:21});
+const tileSat = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {attribution:'© Esri World Imagery',maxZoom:21});
+tileOSM.addTo(map);
+
+const drawnItems = new L.FeatureGroup().addTo(map);
+const stallLayer = new L.FeatureGroup().addTo(map);
+
+const drawControl = new L.Control.Draw({
+  edit: { featureGroup: drawnItems },
+  draw: {
+    polygon:  { allowIntersection:false, shapeOptions:{color:'#f5c842',weight:2,fillOpacity:.13} },
+    polyline: { shapeOptions:{color:'#e87f3a',weight:3} },
+    rectangle:false, circle:false, marker:false, circlemarker:false
+  }
+});
+map.addControl(drawControl);
+
+// ─── TILE TOGGLE ─────────────────────────────────────────────
+let _sat = false;
+document.getElementById('tile-btn').addEventListener('click', function(){
+  _sat=!_sat;
+  if(_sat){map.removeLayer(tileOSM);tileSat.addTo(map);this.textContent='🗺 Street';this.classList.add('active');}
+  else{map.removeLayer(tileSat);tileOSM.addTo(map);this.textContent='🛰 Satellite';this.classList.remove('active');}
+});
+
+// ─── MODE MANAGER ────────────────────────────────────────────
+function setMode(mode){
+  _mode=mode;
+  const mapEl=document.getElementById('map');
+  const banner=document.getElementById('place-banner');
+  const placeBtn=document.getElementById('place-btn');
+  const cancelBtn=document.getElementById('cancel-place-btn');
+  const detectBtn=document.getElementById('detect-btn');
+
+  mapEl.classList.remove('mode-detect','mode-stalls');
+  banner.style.display='none';
+  placeBtn.style.display='';
+  cancelBtn.style.display='none';
+  detectBtn.classList.remove('active');
+  detectBtn.textContent='🅿 Detect Lot';
+
+  if(mode==='detect'){
+    mapEl.classList.add('mode-detect');
+    detectBtn.classList.add('active');
+    detectBtn.textContent='✕ Cancel';
+    setOSMStatus('👆 Click anywhere on a parking lot…','loading');
+    document.getElementById('osm-card').style.display='';
+    showTab('tab-lot');
+  }
+  if(mode==='stalls'){
+    mapEl.classList.add('mode-stalls');
+    banner.style.display='block';
+    placeBtn.style.display='none';
+    cancelBtn.style.display='';
+  }
+}
+
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape' && _mode!=='idle') setMode('idle');
+});
+
+// ─── MAP CLICK ROUTER ────────────────────────────────────────
+map.on('click', e=>{
+  if(_mode==='detect'){ setMode('idle'); detectLotAt(e.latlng); }
+  else if(_mode==='stalls'){ placeStallRow(e.latlng); }
+});
+
+// ─── OSM LOT DETECTION ───────────────────────────────────────
+function setOSMStatus(msg,state){
+  const card=document.getElementById('osm-card');
+  const el=document.getElementById('osm-msg');
+  card.style.display='';
+  el.textContent=msg;
+  el.style.color=state==='loading'?'var(--accent)':state==='ok'?'var(--green)':'var(--red)';
+}
+
+async function queryOverpass(q){
+  const r=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q)});
+  return r.json();
+}
+
+async function detectLotAt(latlng){
+  setOSMStatus('🔍 Querying OpenStreetMap…','loading');
+  const mkQ=(R)=>{
+    const b=`${latlng.lat-R},${latlng.lng-R},${latlng.lat+R},${latlng.lng+R}`;
+    return `[out:json][timeout:12];(way["amenity"="parking"](${b});way["landuse"="parking"](${b});way["parking"="surface"](${b}););out geom;`;
+  };
+  try{
+    let data=await queryOverpass(mkQ(0.0003));
+    if(!data.elements?.length) data=await queryOverpass(mkQ(0.001));
+    if(!data.elements?.length){
+      setOSMStatus('⚠️ No parking lot found in OSM here.\nTry clicking the paved surface directly, or draw manually.','warn');
+      return;
+    }
+    applyOSMLot(data.elements,latlng);
+  }catch(err){
+    setOSMStatus('❌ Query failed — check your internet connection.','warn');
+  }
+}
+
+function applyOSMLot(elements,clickLL){
+  let best=null,bestD=Infinity;
+  elements.forEach(el=>{
+    if(!el.geometry?.length)return;
+    const cLat=el.geometry.reduce((a,n)=>a+n.lat,0)/el.geometry.length;
+    const cLng=el.geometry.reduce((a,n)=>a+n.lon,0)/el.geometry.length;
+    const d=Math.hypot(cLat-clickLL.lat,cLng-clickLL.lng);
+    if(d<bestD){bestD=d;best=el;}
+  });
+  if(!best?.geometry?.length){setOSMStatus('⚠️ Could not parse boundary. Draw manually.','warn');return;}
+
+  const lls=best.geometry.map(n=>L.latLng(n.lat,n.lon));
+  const color=PALETTE[_colorIdx++%PALETTE.length];
+  const layer=L.polygon(lls,{color,fillColor:color,weight:2,fillOpacity:.15});
+  drawnItems.addLayer(layer);
+  map.fitBounds(layer.getBounds(),{padding:[40,40]});
+
+  const {areaM2,perimM}=shapeMetrics(layer,'polygon');
+  shapes.push({id:_shapeId++,type:'polygon',label:`OSM Lot ${shapes.length+1}`,color,areaM2,perimM,layer});
+  refreshShapeList(); updateResults(); autoSave();
+
+  const sqft=Math.round(areaM2*M2_SQFT).toLocaleString('en-CA');
+  const name=best.tags?.name||best.tags?.['addr:street']||'Unnamed lot';
+  setOSMStatus(`✅ "${name}" detected\n${sqft} sq ft · ${elements.length} area(s) found\nUse the edit tool to adjust.`,'ok');
+  showToast(`Lot detected — ${sqft} sq ft`);
+}
+
+document.getElementById('detect-btn').addEventListener('click',()=>{
+  if(_mode==='detect')setMode('idle'); else setMode('detect');
+});
+
+// ─── STALL GEOMETRY ──────────────────────────────────────────
+/*
+ * Local flat-earth coordinate system:
+ *   rowDir  = along the row  (unit vector)
+ *   depthDir= into the stall (perpendicular)
+ * All offsets in metres, projected back to LatLng.
+ */
+function offsetLL(ll,dx,dy){
+  return L.latLng(
+    ll.lat+dy/111320,
+    ll.lng+dx/(111320*Math.cos(ll.lat*Math.PI/180))
+  );
+}
+
+function rotateOffset(ll,center,rot){
+  const ax=ll.lng-center.lng, ay=ll.lat-center.lat;
+  return L.latLng(center.lat+ax*Math.sin(rot)+ay*Math.cos(rot),
+                  center.lng+ax*Math.cos(rot)-ay*Math.sin(rot));
+}
+
+function buildStallGroup(center,angle,count,wFt,dFt,rowRotDeg){
+  const wM=wFt*FT_M, dM=dFt*FT_M;
+  const rot=(angle+rowRotDeg)*Math.PI/180;
+  const totalW=count*wM;
+  const group=L.featureGroup();
+
+  for(let i=0;i<count;i++){
+    const cx=-totalW/2+i*wM+wM/2;
+    // Corner offsets in local frame (unrotated)
+    const raw=[
+      offsetLL(center,cx-wM/2,0),
+      offsetLL(center,cx+wM/2,0),
+      offsetLL(center,cx+wM/2,dM),
+      offsetLL(center,cx-wM/2,dM),
+    ].map(ll=>rotateOffset(ll,center,rot));
+    L.polygon(raw,{weight:1.5,fillOpacity:.08,interactive:false}).addTo(group);
+  }
+
+  // Front stripe
+  const fL=rotateOffset(offsetLL(center,-totalW/2,0),center,rot);
+  const fR=rotateOffset(offsetLL(center, totalW/2,0),center,rot);
+  L.polyline([fL,fR],{weight:2.5,interactive:false}).addTo(group);
+
+  return group;
+}
+
+// Industry-standard minimum line footage for a fresh stripe row:
+// (N+1) dividers × depth  +  N × width (front stripe only)
+function stallLineFt(count,wFt,dFt){ return (count+1)*dFt + count*wFt; }
+
+// ─── STALL PLACEMENT ─────────────────────────────────────────
+function placeStallRow(latlng){
+  const count  =parseInt(document.getElementById('stalls-per-row').value)||8;
+  const wFt    =parseFloat(document.getElementById('stall-w').value)||9;
+  const dFt    =parseFloat(document.getElementById('stall-d').value)||18;
+  const rowRot =parseFloat(document.getElementById('row-rotation').value)||0;
+  const aisle  =parseFloat(document.getElementById('aisle-width').value)||24;
+  const label  =document.getElementById('row-label').value.trim()||`Row ${stallRows.length+1}`;
+  const color  =PALETTE[_stallId%PALETTE.length];
+
+  const group=buildStallGroup(latlng,_angle,count,wFt,dFt,rowRot);
+  group.setStyle({color,fillColor:color});
+  stallLayer.addLayer(group);
+
+  const lFt=stallLineFt(count,wFt,dFt);
+  stallRows.push({
+    id:_stallId++, label, color, angle:_angle,
+    count, stallW:wFt, stallD:dFt, rowRotation:rowRot, aisleWidth:aisle,
+    centerLat:latlng.lat, centerLng:latlng.lng,
+    lineFt:lFt, group
+  });
+
+  refreshStallList(); updateResults(); autoSave();
+  showToast(`"${label}" — ${count} stalls · ${Math.round(lFt)} line ft`);
+}
+
+document.getElementById('place-btn').addEventListener('click',()=>setMode('stalls'));
+document.getElementById('cancel-place-btn').addEventListener('click',()=>setMode('idle'));
+
+document.getElementById('clear-stalls-btn').addEventListener('click',()=>{
+  if(!stallRows.length)return;
+  if(!confirm('Clear all stall rows?'))return;
+  stallRows.forEach(r=>stallLayer.removeLayer(r.group));
+  stallRows=[];_stallId=0;
+  refreshStallList(); updateResults(); autoSave();
+  showToast('Stall rows cleared');
+});
+
+// Angle picker
+document.querySelectorAll('.ang-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.ang-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    _angle=parseInt(btn.dataset.angle);
+  });
+});
+
+// Live stall preview
+function updateStallPreview(){
+  const w=parseFloat(document.getElementById('stall-w').value)||9;
+  const d=parseFloat(document.getElementById('stall-d').value)||18;
+  const n=parseInt(document.getElementById('stalls-per-row').value)||8;
+  const lFt=stallLineFt(n,w,d);
+  set('stall-dim',`${w}×${d} ft`);
+  set('stall-area-ft',`${(w*d).toFixed(0)} ft²`);
+  set('stall-row-info',`${n} stalls / ${Math.round(lFt)} line ft`);
+}
+['stall-w','stall-d','stalls-per-row'].forEach(id=>
+  document.getElementById(id).addEventListener('input',updateStallPreview)
+);
+updateStallPreview();
+
+// ─── DRAW EVENTS ─────────────────────────────────────────────
+map.on(L.Draw.Event.CREATED,e=>{
+  const layer=e.layer, type=e.layerType;
+  const color=PALETTE[_colorIdx++%PALETTE.length];
+  if(layer.setStyle) layer.setStyle({color,fillColor:color});
+  drawnItems.addLayer(layer);
+  const {areaM2,perimM}=shapeMetrics(layer,type);
+  const lbl={polygon:'Lot',polyline:'Line'}[type]||'Shape';
+  shapes.push({id:_shapeId++,type,label:`${lbl} ${shapes.length+1}`,color,areaM2,perimM,layer});
+  refreshShapeList(); updateResults(); autoSave();
+  showToast(`${lbl} added`);
+});
+
+map.on(L.Draw.Event.EDITED,e=>{
+  e.layers.eachLayer(l=>{
+    const s=shapes.find(x=>x.layer===l);
+    if(s){const m=shapeMetrics(l,s.type);s.areaM2=m.areaM2;s.perimM=m.perimM;}
+  });
+  refreshShapeList(); updateResults(); autoSave();
+});
+
+map.on(L.Draw.Event.DELETED,e=>{
+  e.layers.eachLayer(l=>{const i=shapes.findIndex(x=>x.layer===l);if(i!==-1)shapes.splice(i,1);});
+  refreshShapeList(); updateResults(); autoSave();
+});
+
+// ─── SHAPE METRICS ───────────────────────────────────────────
+function shapeMetrics(layer,type){
+  let areaM2=0,perimM=0;
+  try{
+    const gj=layer.toGeoJSON();
+    if(type!=='polyline'){areaM2=turf.area(gj);perimM=turf.length(gj,{units:'meters'});}
+    else{perimM=turf.length(gj,{units:'meters'});}
+  }catch(e){console.warn('Turf error',e);}
+  return{areaM2,perimM};
+}
+
+// ─── PAINT ENGINE ────────────────────────────────────────────
+// Core formula — called from updateResults(), ready for Stage 3/4.
+function calcPaint(linearFt,widthIn,coverageFt2,wastePct,coats){
+  const widthFt=widthIn/12;
+  const paintAreaSqFt=linearFt*widthFt;
+  const rawGallons=paintAreaSqFt/coverageFt2;
+  const withWaste=rawGallons*(1+wastePct/100);
+  return{paintAreaSqFt,rawGallons,totalGallons:withWaste*coats};
+}
+
+// Paint type auto-fills coverage rate
+document.getElementById('paint-type').addEventListener('change',function(){
+  const cov=this.options[this.selectedIndex].dataset.cov;
+  if(cov) document.getElementById('coverage-rate').value=cov;
+  updateResults();
+});
+
+// ─── UPDATE ALL RESULTS ──────────────────────────────────────
+function updateResults(){
+  // Lot measurements
+  let totalAreaM2=0, totalPerimM=0;
+  shapes.forEach(s=>{totalAreaM2+=s.areaM2||0;totalPerimM+=s.perimM||0;});
+  const sqft=totalAreaM2*M2_SQFT, perimFt=totalPerimM*M_FT;
+
+  set('r-sqft',  totalAreaM2?fmt(sqft,0):'—');
+  set('r-sqm',   totalAreaM2?fmt(totalAreaM2,1):'—');
+  set('r-acres', totalAreaM2?fmt(totalAreaM2*M2_ACRES,3):'—');
+  set('r-perim', totalPerimM?fmt(perimFt,0):'—');
+
+  // Stall summary
+  const totalStalls =stallRows.reduce((a,r)=>a+r.count,0);
+  const totalLineFt =stallRows.reduce((a,r)=>a+r.lineFt,0);
+  const aisleArea   =stallRows.reduce((a,r)=>a+(r.count*r.stallW*r.aisleWidth),0);
+  set('s-stalls', totalStalls);
+  set('s-rows',   stallRows.length);
+  set('s-lineft', fmt(totalLineFt,0));
+  set('s-aisle',  stallRows.length?fmt(aisleArea,0):'—');
+
+  // Paint estimate
+  const widthIn  =parseFloat(document.getElementById('line-width').value)||4;
+  const coverage =parseFloat(document.getElementById('coverage-rate').value)||320;
+  const wastePct =parseFloat(document.getElementById('waste-pct').value)||10;
+  const coats    =parseInt(document.getElementById('coats').value)||1;
+  let   mode     =document.getElementById('estimate-mode').value;
+
+  // Auto: pick stalls > perimeter > nothing
+  if(mode==='auto'){
+    if(totalLineFt>0)         mode='stalls';
+    else if(perimFt>0)        mode='perimeter';
+    else{set('r-gallons','—');set('r-linear','—');set('r-paint-area','—');
+         set('r-formula','Draw a lot or place stall rows to begin.');return;}
+  }
+
+  let linearFt=0, gallons=0, paintArea=0, lines=[];
+
+  if(mode==='stalls'){
+    if(!totalLineFt){set('r-gallons','—');set('r-linear','—');set('r-paint-area','—');
+                     set('r-formula','No stall rows placed yet.\nPlace rows in the Stalls tab first.');return;}
+    const r=calcPaint(totalLineFt,widthIn,coverage,wastePct,coats);
+    linearFt=totalLineFt;gallons=r.totalGallons;paintArea=r.paintAreaSqFt;
+    lines=[`Source: Stall Lines`,`Rows: ${stallRows.length}  ·  Stalls: ${totalStalls}`,
+           `Line footage: ${fmt(totalLineFt,0)} ft`,`Line width: ${widthIn}" = ${(widthIn/12).toFixed(3)} ft`,
+           `Paint area: ${fmt(r.paintAreaSqFt,1)} ft²`,
+           `Raw: ${fmt(r.paintAreaSqFt,1)} ÷ ${coverage} = ${fmt(r.rawGallons,3)} gal`,
+           `+ ${wastePct}% waste: ×${(1+wastePct/100).toFixed(2)}`,
+           `×${coats} coat(s): = ${fmt(r.totalGallons,2)} gal`];
+
+  }else if(mode==='perimeter'){
+    if(!perimFt){set('r-gallons','—');set('r-linear','—');set('r-paint-area','—');
+                 set('r-formula','No lot polygon drawn yet.');return;}
+    const r=calcPaint(perimFt,widthIn,coverage,wastePct,coats);
+    linearFt=perimFt;gallons=r.totalGallons;paintArea=r.paintAreaSqFt;
+    lines=[`Source: Perimeter Lines`,`Perimeter: ${fmt(perimFt,0)} ft`,
+           `Line width: ${widthIn}" = ${(widthIn/12).toFixed(3)} ft`,
+           `Paint area: ${fmt(r.paintAreaSqFt,1)} ft²`,
+           `Raw: ${fmt(r.paintAreaSqFt,1)} ÷ ${coverage} = ${fmt(r.rawGallons,3)} gal`,
+           `+ ${wastePct}% waste: ×${(1+wastePct/100).toFixed(2)}`,
+           `×${coats} coat(s): = ${fmt(r.totalGallons,2)} gal`];
+
+  }else if(mode==='full'){
+    if(!sqft){set('r-gallons','—');set('r-linear','—');set('r-paint-area','—');
+              set('r-formula','No lot polygon drawn yet.');return;}
+    const rawGal=sqft/coverage, withWaste=rawGal*(1+wastePct/100);
+    gallons=withWaste*coats; paintArea=sqft; linearFt=0;
+    lines=[`Source: Full Surface Coat`,`Area: ${fmt(sqft,0)} ft²`,
+           `Raw: ${fmt(sqft,0)} ÷ ${coverage} = ${fmt(rawGal,3)} gal`,
+           `+ ${wastePct}% waste: ×${(1+wastePct/100).toFixed(2)}`,
+           `×${coats} coat(s): = ${fmt(gallons,2)} gal`];
+  }
+
+  set('r-gallons',   fmt(gallons,2));
+  set('r-linear',    linearFt>0?fmt(linearFt,0):'—');
+  set('r-paint-area',fmt(paintArea,1));
+  set('r-formula',   lines.join('\n'));
+}
+
+// ─── LAYER LISTS ─────────────────────────────────────────────
+function refreshShapeList(){
+  const list=document.getElementById('shape-list');
+  set('shape-count',shapes.length);
+  if(!shapes.length){list.innerHTML='<div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No shapes yet.</div>';return;}
+  list.innerHTML='';
+  shapes.forEach(s=>{
+    const meta=s.type==='polyline'?`${fmt((s.perimM||0)*M_FT,0)} ft`:`${fmt((s.areaM2||0)*M2_SQFT,0)} ft²`;
+    list.appendChild(mkItem(s.id,s.color,s.label,meta,id=>{
+      const i=shapes.findIndex(x=>x.id===id);
+      if(i!==-1){drawnItems.removeLayer(shapes[i].layer);shapes.splice(i,1);}
+      refreshShapeList();updateResults();autoSave();
+    }));
+  });
+}
+
+function refreshStallList(){
+  const list=document.getElementById('stall-list');
+  set('stall-count',stallRows.length);
+  if(!stallRows.length){list.innerHTML='<div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No rows placed.</div>';return;}
+  list.innerHTML='';
+  stallRows.forEach(r=>{
+    list.appendChild(mkItem(r.id,r.color,r.label,
+      `${r.count} stalls · ${r.angle}° · ${fmt(r.lineFt,0)} ft`,
+      id=>{
+        const i=stallRows.findIndex(x=>x.id===id);
+        if(i!==-1){stallLayer.removeLayer(stallRows[i].group);stallRows.splice(i,1);}
+        refreshStallList();updateResults();autoSave();
+      }
+    ));
+  });
+}
+
+function mkItem(id,color,label,meta,onDel){
+  const el=document.createElement('div');
+  el.className='li';
+  el.innerHTML=`<div class="li-sw" style="background:${color}"></div><div class="li-name">${label}</div><div class="li-meta">${meta}</div><button class="li-del" title="Remove">✕</button>`;
+  el.querySelector('.li-del').addEventListener('click',()=>onDel(id));
+  return el;
+}
+
+// ─── SIDEBAR TABS ────────────────────────────────────────────
+function showTab(id){
+  document.querySelectorAll('.s-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===id));
+  document.querySelectorAll('.s-panel').forEach(p=>p.classList.toggle('active',p.id===id));
+}
+document.querySelectorAll('.s-tab').forEach(t=>t.addEventListener('click',()=>showTab(t.dataset.tab)));
+
+// ─── CONTROLS ────────────────────────────────────────────────
+document.getElementById('recalc-btn').addEventListener('click',()=>{updateResults();showToast('Recalculated ✓');});
+
+document.getElementById('clear-shapes-btn').addEventListener('click',()=>{
+  if(!shapes.length)return;
+  if(!confirm('Clear all lot shapes?'))return;
+  drawnItems.clearLayers();shapes=[];_colorIdx=0;
+  refreshShapeList();updateResults();autoSave();
+  showToast('Shapes cleared');
+});
+
+['line-width','coverage-rate','waste-pct','coats','estimate-mode']
+  .forEach(id=>document.getElementById(id).addEventListener('input',updateResults));
+
+// ─── SEARCH ──────────────────────────────────────────────────
+async function doSearch(){
+  const q=document.getElementById('search-input').value.trim();
+  if(!q)return;
+  try{
+    const data=await(await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`)).json();
+    if(data?.length){map.setView([parseFloat(data[0].lat),parseFloat(data[0].lon)],17);showToast(`📍 ${data[0].display_name.split(',').slice(0,2).join(', ')}`);}
+    else showToast('Location not found');
+  }catch{showToast('Search error');}
+}
+document.getElementById('search-btn').addEventListener('click',doSearch);
+document.getElementById('search-input').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
+
+// ─── SAVE / LOAD / EXPORT ────────────────────────────────────
+function buildPayload(){
+  return{
+    v:2,
+    shapes:shapes.map(s=>({id:s.id,type:s.type,label:s.label,color:s.color,areaM2:s.areaM2,perimM:s.perimM,geoJson:s.layer.toGeoJSON()})),
+    stallRows:stallRows.map(r=>({id:r.id,label:r.label,color:r.color,angle:r.angle,count:r.count,stallW:r.stallW,stallD:r.stallD,rowRotation:r.rowRotation,aisleWidth:r.aisleWidth,lineFt:r.lineFt,centerLat:r.centerLat,centerLng:r.centerLng}))
+  };
+}
+
+function autoSave(){
+  try{localStorage.setItem('paintline_v2',JSON.stringify(buildPayload()));}catch(e){}
+}
+
+document.getElementById('save-btn').addEventListener('click',()=>{autoSave();showToast('Saved ✓');});
+
+document.getElementById('export-btn').addEventListener('click',()=>{
+  const p=buildPayload();
+  p.summary={totalStalls:stallRows.reduce((a,r)=>a+r.count,0),totalStallLineFt:Math.round(stallRows.reduce((a,r)=>a+r.lineFt,0)),totalLotSqFt:Math.round(shapes.reduce((a,s)=>a+(s.areaM2||0),0)*M2_SQFT),exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(p,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`paintline_${Date.now()}.json`;a.click();
+  showToast('Exported ✓');
+});
+
+document.getElementById('load-btn').addEventListener('click',()=>{
+  const raw=localStorage.getItem('paintline_v2');
+  if(!raw){showToast('No saved project found');return;}
+  try{loadPayload(JSON.parse(raw));showToast(`Loaded ${shapes.length} shape(s) + ${stallRows.length} row(s)`);}
+  catch(e){showToast('Load failed — data may be corrupted');}
+});
+
+function loadPayload(data){
+  drawnItems.clearLayers();stallLayer.clearLayers();
+  shapes=[];stallRows=[];
+
+  (data.shapes||[]).forEach(s=>{
+    try{
+      let layer;
+      if(s.type==='polyline') layer=L.polyline(L.GeoJSON.coordsToLatLngs(s.geoJson.geometry.coordinates,0));
+      else layer=L.polygon(L.GeoJSON.coordsToLatLngs(s.geoJson.geometry.coordinates[0],0));
+      if(layer.setStyle) layer.setStyle({color:s.color,fillColor:s.color,fillOpacity:.13});
+      drawnItems.addLayer(layer);
+      shapes.push({id:s.id,type:s.type,label:s.label,color:s.color,areaM2:s.areaM2,perimM:s.perimM,layer});
+    }catch(e){console.warn('Shape load error',e);}
+  });
+
+  (data.stallRows||[]).forEach(r=>{
+    try{
+      const center=L.latLng(r.centerLat,r.centerLng);
+      const group=buildStallGroup(center,r.angle,r.count,r.stallW,r.stallD,r.rowRotation||0);
+      group.setStyle({color:r.color,fillColor:r.color});
+      stallLayer.addLayer(group);
+      stallRows.push({...r,group});
+    }catch(e){console.warn('Stall row load error',e);}
+  });
+
+  if(shapes.length) map.fitBounds(drawnItems.getBounds(),{padding:[40,40]});
+  else if(stallRows.length) map.fitBounds(stallLayer.getBounds(),{padding:[40,40]});
+
+  _shapeId=shapes.length?Math.max(...shapes.map(s=>s.id))+1:0;
+  _stallId=stallRows.length?Math.max(...stallRows.map(r=>r.id))+1:0;
+
+  refreshShapeList();refreshStallList();updateResults();
+}
+
+// ─── UTILITIES ───────────────────────────────────────────────
+function fmt(n,dec=0){
+  if(!isFinite(n)||n==null)return'—';
+  return n.toLocaleString('en-CA',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+}
+function set(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
+
+// ─── TOAST ───────────────────────────────────────────────────
+let _tt;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STAGE 3 — Line Planning
+   Draw individual paint lines as polylines; each line type
+   (stall divider, front stripe, stop bar, arrow) has a default
+   width. calcPaint() receives the aggregated footage per type.
+
+   STAGE 4 — Roadway / Highway Mode
+   New mode tab. Polyline lanes. Line type presets (solid, broken
+   10/30, double-yellow, edge-white). Dash formula:
+     dashCount = floor(totalLen / (dashLen + gapLen))
+   calcPaint(dashCount × dashLen, width, coverage, waste, coats)
+
+   STAGE 5 — Polish
+   PDF summary, multi-project localStorage slots, image canvas.
+   ═══════════════════════════════════════════════════════════════ */
+
+// ─── INIT ────────────────────────────────────────────────────
+const _saved=localStorage.getItem('paintline_v2');
+if(_saved){
+  try{loadPayload(JSON.parse(_saved));showToast('Last project restored ✓');}
+  catch{refreshShapeList();refreshStallList();updateResults();showToast('Welcome to PaintLine Pro');}
+}else{
+  refreshShapeList();refreshStallList();updateResults();
+  showToast('Detect a lot or draw manually to begin');
+}
+</script>
+</body>
+</html>
