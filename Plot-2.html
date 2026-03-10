@@ -1,0 +1,3874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Plot</title>
+<!--
+  CDN Libraries:
+  Leaflet 1.9.4       — maps
+  Leaflet.draw 1.0.4  — polygon / polyline drawing
+  Turf.js 6.5.0       — geospatial math
+  Hammer.js 2.0.8     — touch gestures (long-press, pan, pinch)
+  Google Fonts        — Oswald, Source Code Pro, Inter
+  Overpass API        — OSM parking data (free, no key)
+  Nominatim           — OSM geocoding (free, no key)
+-->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Source+Code+Pro:wght@400;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+/* ═══════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════ */
+:root{
+  --ink:#0a0b0f;--ink-soft:#14161e;--steel:#1e2029;--panel:#13151c;
+  --border:#252836;--muted:#3d4258;--text:#cdd2e8;--text-dim:#5c6280;
+  --accent:#f5c842;--accent2:#e87f3a;--green:#3ddc84;--red:#f06c6c;--blue:#5ba4f5;
+  --glow-y:rgba(245,200,66,.35);--glow-o:rgba(232,127,58,.35);--glow-g:rgba(61,220,132,.35);
+  --sw:310px;--th:54px;--r:7px;
+  --fh:'Oswald',sans-serif;--fb:'Inter',sans-serif;--fm:'Source Code Pro',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+body{font-family:var(--fb);background:var(--ink);color:var(--text);display:flex;flex-direction:column}
+
+/* Hide Leaflet draw toolbar + zoom in guided mode */
+body.guided-mode .leaflet-draw,
+body.guided-mode .leaflet-control-zoom{ display:none!important; }
+/* Block expert UI from receiving any touch/click events in guided mode */
+body.guided-mode #sidebar,
+body.guided-mode #topbar{ pointer-events:none!important; }
+
+/* ═══════════════════════════════════════════
+   TOPBAR
+═══════════════════════════════════════════ */
+#topbar{
+  height:var(--th);background:var(--ink-soft);
+  border-bottom:2px solid var(--accent);
+  display:none;align-items:center;padding:0 12px;gap:8px;
+  z-index:1000;flex-shrink:0;overflow:visible;
+  box-shadow:0 2px 20px rgba(0,0,0,.6);
+  white-space:nowrap;
+}
+#topbar.show{ display:flex; }
+/* Search shrinks on small screens instead of pushing buttons off */
+#search-input{min-width:80px;width:clamp(80px,18vw,180px)}
+
+/* Logo placeholder — swap SVG here when ready */
+.logo{
+  display:flex;align-items:center;gap:9px;flex-shrink:0;text-decoration:none;
+}
+.logo-icon{
+  width:32px;height:32px;flex-shrink:0;
+  background:var(--accent);border-radius:5px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--fh);font-size:14px;font-weight:700;color:var(--ink);
+  box-shadow:0 0 12px var(--glow-y);
+  position:relative;overflow:hidden;
+}
+.logo-icon::after{
+  content:'';position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);
+  width:6px;height:10px;background:var(--accent);
+  clip-path:polygon(0 0,100% 0,50% 100%);
+  animation:drip 2.4s ease-in-out infinite;
+}
+@keyframes drip{0%,60%{transform:translateX(-50%) scaleY(0);opacity:0}70%{transform:translateX(-50%) scaleY(1);opacity:1}100%{transform:translateX(-50%) scaleY(0) translateY(8px);opacity:0}}
+.logo-text{font-family:var(--fh);font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);text-transform:uppercase;white-space:nowrap;line-height:1}
+.logo-text span{color:var(--text);font-weight:400}
+
+.tb-gap{flex:1;min-width:4px}
+
+.tb-btn{
+  font-family:var(--fh);font-size:11px;letter-spacing:1px;font-weight:600;
+  padding:6px 11px;border:1px solid var(--border);background:var(--steel);
+  color:var(--text-dim);cursor:pointer;border-radius:var(--r);
+  text-transform:uppercase;transition:all .18s;white-space:nowrap;flex-shrink:0;
+  -webkit-user-select:none;user-select:none;
+  min-height:34px;min-width:34px;display:flex;align-items:center;gap:5px;
+}
+.tb-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+.tb-btn.on{background:var(--accent);color:var(--ink);border-color:var(--accent);box-shadow:0 0 14px var(--glow-y)}
+.tb-btn.on:hover{background:#ffd966}
+.tb-btn.scanning{background:var(--blue);color:#fff;border-color:var(--blue);box-shadow:0 0 14px rgba(91,164,245,.5);animation:pulse-btn .8s ease-in-out infinite alternate}
+@keyframes pulse-btn{from{box-shadow:0 0 8px rgba(91,164,245,.4)}to{box-shadow:0 0 20px rgba(91,164,245,.8)}}
+
+#search-wrap{display:flex;align-items:center;gap:5px;background:var(--steel);border:1px solid var(--border);border-radius:var(--r);padding:0 9px;height:34px;flex-shrink:0}
+#search-input{background:transparent;border:none;outline:none;color:var(--text);font-family:var(--fb);font-size:13px;width:160px}
+#search-input::placeholder{color:var(--text-dim)}
+#search-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:15px;padding:0}
+
+/* ═══════════════════════════════════════════
+   MAIN LAYOUT
+═══════════════════════════════════════════ */
+#main{display:flex;flex:1;overflow:hidden;position:relative}
+#map{flex:1;background:var(--ink)}
+
+/* ═══════════════════════════════════════════
+   SCAN OVERLAY (Canvas over map)
+═══════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════
+   SCAN HUD (status pill)
+═══════════════════════════════════════════ */
+#scan-hud{
+  display:none;position:absolute;top:14px;left:50%;
+  transform:translateX(-50%);z-index:700;
+  background:rgba(10,11,15,.88);border:1px solid var(--blue);
+  border-radius:22px;padding:8px 18px;
+  font-family:var(--fh);font-size:12px;letter-spacing:1px;
+  text-transform:uppercase;color:var(--blue);
+  box-shadow:0 0 20px rgba(91,164,245,.3);
+  display:none;align-items:center;gap:8px;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  white-space:nowrap;
+}
+#scan-hud.show{display:flex}
+.hud-dot{width:7px;height:7px;border-radius:50%;background:var(--blue);animation:blink .7s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* Place mode banner */
+#place-banner{
+  display:none;position:absolute;top:14px;left:50%;
+  transform:translateX(-50%);z-index:700;
+  background:var(--accent);color:var(--ink);
+  font-family:var(--fh);font-size:12px;font-weight:700;letter-spacing:1px;
+  text-transform:uppercase;padding:8px 18px;border-radius:22px;
+  box-shadow:0 4px 20px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap;
+}
+
+/* ═══════════════════════════════════════════
+   LEAFLET THEME
+═══════════════════════════════════════════ */
+/* Zoom bar */
+.leaflet-bar a{
+  background-color:#2c2f3e!important;
+  border-color:#444860!important;
+  color:#ffffff!important;
+  font-weight:600!important;
+  font-size:18px!important;
+  text-shadow:none!important;
+}
+.leaflet-bar a:hover{
+  background-color:var(--accent)!important;
+  color:var(--ink)!important;
+  border-color:var(--accent)!important;
+}
+/* Draw toolbar — hide default sprite, inject SVG icons via content */
+.leaflet-draw-toolbar a{
+  background-color:#2c2f3e!important;
+  border-color:#444860!important;
+  background-image:none!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  font-size:16px!important;
+  position:relative!important;
+}
+.leaflet-draw-toolbar a:hover{
+  background-color:var(--accent)!important;
+  border-color:var(--accent)!important;
+}
+/* Polygon tool */
+.leaflet-draw-draw-polygon::after{ content:'⬠'; color:#e8eaff; font-size:15px; }
+/* Polyline tool */
+.leaflet-draw-draw-polyline::after{ content:'╱'; color:#e8eaff; font-size:17px; }
+/* Edit shapes */
+.leaflet-draw-edit-edit::after{ content:'✎'; color:#e8eaff; font-size:15px; }
+/* Delete shapes */
+.leaflet-draw-edit-remove::after{ content:'🗑'; font-size:13px; }
+/* Hover — darken icon against yellow bg */
+.leaflet-draw-toolbar a:hover::after{ color:var(--ink)!important; filter:none; }
+/* Edit/delete action buttons */
+.leaflet-draw-actions a{
+  background-color:#2c2f3e!important;
+  color:#e8eaff!important;
+  font-size:11px!important;
+}
+.leaflet-draw-actions a:hover{
+  background-color:var(--accent)!important;
+  color:var(--ink)!important;
+}
+/* Edit/delete toolbar */
+.leaflet-draw-actions a{
+  background-color:#2c2f3e!important;
+  color:#ffffff!important;
+  font-size:11px!important;
+}
+#map.mode-detect{cursor:cell!important}
+#map.mode-stalls{cursor:crosshair!important}
+
+/* Glowing green lot boundary */
+.detected-lot{
+  animation:lot-in .6s cubic-bezier(.22,1,.36,1) forwards;
+}
+@keyframes lot-in{
+  from{opacity:0;filter:drop-shadow(0 0 0px var(--green))}
+  to  {opacity:1;filter:drop-shadow(0 0 10px rgba(61,220,132,.7))}
+}
+
+/* ═══════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════ */
+#sidebar{
+  width:var(--sw);background:var(--panel);
+  border-left:1px solid var(--border);
+  display:none;flex-direction:column;overflow:hidden;flex-shrink:0;
+  box-shadow:-4px 0 24px rgba(0,0,0,.4);
+}
+#sidebar.show{ display:flex; }
+.s-head{padding:11px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.s-head h2{font-family:var(--fh);font-size:12px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase}
+.badge{background:var(--accent);color:var(--ink);font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px}
+
+.s-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.s-tab{flex:1;font-family:var(--fh);font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:10px 4px;background:transparent;border:none;color:var(--text-dim);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;-webkit-user-select:none;user-select:none}
+.s-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.s-tab:hover:not(.active){color:var(--text)}
+
+.s-panel{display:none;flex:1;overflow-y:auto;padding:12px 12px 32px;flex-direction:column;gap:10px}
+.s-panel.active{display:flex}
+.s-panel::-webkit-scrollbar{width:3px}
+.s-panel::-webkit-scrollbar-thumb{background:var(--muted);border-radius:2px}
+
+/* CARDS */
+.card{background:var(--steel);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:box-shadow .2s}
+.card.glow{box-shadow:0 0 16px var(--glow-y)}
+.card-hd{font-family:var(--fh);font-size:10px;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase;padding:8px 11px 7px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0}
+.card-bd{padding:10px;display:flex;flex-direction:column;gap:8px}
+
+/* STAT GRID */
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sb{background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:8px;display:flex;flex-direction:column;gap:2px;transition:all .25s}
+.sb.wide{grid-column:1/-1}
+.sb .lbl{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px}
+.sb .val{font-family:var(--fm);font-size:16px;font-weight:600;color:var(--accent);line-height:1.2;transition:color .3s}
+.sb .unt{font-family:var(--fm);font-size:9px;color:var(--text-dim)}
+.sb.hi .val{color:var(--green)}
+.sb.warn .val{color:var(--accent2)}
+.sb.blue .val{color:var(--blue)}
+.sb.flash{animation:flash-in .4s ease}
+@keyframes flash-in{0%{background:rgba(245,200,66,.15)}100%{background:var(--ink-soft)}}
+
+/* FORMS */
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px}
+.field input,.field select{background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:8px 9px;color:var(--text);font-family:var(--fb);font-size:13px;outline:none;transition:border-color .15s;width:100%}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.field select option{background:var(--ink-soft)}
+.fr2{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+
+/* BUTTONS */
+.btn{font-family:var(--fh);font-size:11px;letter-spacing:1px;font-weight:600;text-transform:uppercase;padding:9px 12px;border:1px solid;border-radius:var(--r);cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:5px;-webkit-user-select:none;user-select:none;min-height:40px}
+.btn-y{background:var(--accent);border-color:var(--accent);color:var(--ink)}.btn-y:hover{background:#ffd966;box-shadow:0 0 14px var(--glow-y)}
+.btn-g{background:var(--green);border-color:var(--green);color:var(--ink)}.btn-g:hover{opacity:.85;box-shadow:0 0 14px var(--glow-g)}
+.btn-r{background:transparent;border-color:var(--red);color:var(--red)}.btn-r:hover{background:var(--red);color:var(--ink)}
+.btn-o{background:transparent;border-color:var(--border);color:var(--text-dim)}.btn-o:hover{border-color:var(--text-dim);color:var(--text)}
+.btn-full{width:100%}
+.btn-sm{padding:6px 10px;font-size:10px;min-height:34px}
+
+/* ANGLE PICKER */
+.ang-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.ang-btn{background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:9px 5px;color:var(--text-dim);cursor:pointer;font-size:10px;font-family:var(--fh);letter-spacing:1px;text-align:center;transition:all .15s;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:52px;-webkit-user-select:none;user-select:none}
+.ang-btn .ai{font-size:18px;line-height:1}
+.ang-btn:hover,.ang-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(245,200,66,.08);box-shadow:0 0 10px var(--glow-y)}
+
+/* LAYER ITEMS */
+.ll{display:flex;flex-direction:column;gap:4px}
+.li{display:flex;align-items:center;gap:7px;background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:7px 9px;font-size:11px;animation:li-in .25s ease}
+@keyframes li-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.li-sw{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.li-name{flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.li-meta{font-family:var(--fm);font-size:9px;color:var(--text-dim);white-space:nowrap}
+.li-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;padding:2px 4px;transition:color .15s;min-width:24px;min-height:24px;display:flex;align-items:center;justify-content:center}
+.li-del:hover{color:var(--red)}
+
+/* INFO BOX */
+.ibox{background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.15);border-radius:var(--r);padding:10px 11px;font-size:12px;color:#b0b6cc;line-height:1.8}
+.ibox strong{color:var(--accent)}
+
+/* SCAN RESULT CARD */
+.scan-result-card{background:rgba(91,164,245,.08);border:1px solid rgba(91,164,245,.25);border-radius:var(--r);padding:10px 11px;animation:lot-in .4s ease}
+.scan-result-card .sr-title{font-family:var(--fh);font-size:11px;letter-spacing:1px;color:var(--blue);text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.scan-result-card .sr-body{font-size:11px;color:var(--text-dim);line-height:1.7;white-space:pre-line}
+
+hr.div{border:none;border-top:1px solid var(--border);margin:1px 0}
+
+/* FORMULA */
+.formula{background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:9px 10px;font-family:var(--fm);font-size:10px;color:#6d7599;line-height:1.9;white-space:pre;overflow-x:auto}
+
+/* COMING SOON */
+.cs{background:repeating-linear-gradient(45deg,rgba(245,200,66,.02),rgba(245,200,66,.02) 8px,transparent 8px,transparent 16px);border:1px dashed rgba(245,200,66,.18);border-radius:var(--r);padding:12px;text-align:center;font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase}
+.cs strong{color:var(--accent);display:block;margin-bottom:3px;font-size:11px}
+
+/* TOAST */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--steel);border:1px solid rgba(245,200,66,.3);border-radius:22px;padding:10px 18px;font-size:12px;color:var(--text);z-index:9999;transition:transform .3s cubic-bezier(.34,1.56,.64,1);pointer-events:none;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.5);backdrop-filter:blur(8px)}
+#toast.show{transform:translateX(-50%) translateY(0)}
+
+/* SPINNER */
+.spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(91,164,245,.3);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Glitch effect ── */
+@keyframes glitch-clip{
+  0%  {clip-path:inset(0 0 95% 0)}
+  10% {clip-path:inset(20% 0 60% 0)}
+  20% {clip-path:inset(50% 0 30% 0)}
+  30% {clip-path:inset(10% 0 80% 0)}
+  40% {clip-path:inset(70% 0 10% 0)}
+  50% {clip-path:inset(40% 0 50% 0)}
+  60% {clip-path:inset(5%  0 85% 0)}
+  70% {clip-path:inset(60% 0 20% 0)}
+  80% {clip-path:inset(30% 0 55% 0)}
+  100%{clip-path:inset(0 0 95% 0)}
+}
+@keyframes glitch-shift{
+  0%  {transform:translate(0)}
+  20% {transform:translate(-4px, 2px)}
+  40% {transform:translate(4px,-2px)}
+  60% {transform:translate(-2px, 4px)}
+  80% {transform:translate(2px,-1px)}
+  100%{transform:translate(0)}
+}
+.glitch-overlay{
+  position:fixed;inset:0;z-index:8000;pointer-events:none;
+  background:rgba(61,220,132,.04);
+  display:none;
+}
+.glitch-overlay.active{ display:block; }
+.glitch-overlay::before,.glitch-overlay::after{
+  content:'';position:absolute;inset:0;
+  background:inherit;
+}
+.glitch-overlay::before{
+  animation:glitch-clip .12s steps(1) infinite, glitch-shift .12s steps(1) infinite;
+  background:rgba(61,220,132,.06);
+  mix-blend-mode:screen;
+}
+.glitch-overlay::after{
+  animation:glitch-clip .18s steps(1) infinite reverse, glitch-shift .18s steps(1) infinite reverse;
+  background:rgba(245,200,66,.04);
+  mix-blend-mode:screen;
+}
+
+/* ── Green radar ring (guided scan) ── */
+.g-scanning-pill.green-radar{
+  border-color:rgba(61,220,132,.5);
+  color:var(--green);
+  animation:radar-pulse 1s ease-in-out infinite;
+}
+.g-scanning-pill.green-radar .spin{
+  border-color:rgba(61,220,132,.3);
+  border-top-color:var(--green);
+}
+@keyframes radar-pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(61,220,132,.0)}
+  50%     {box-shadow:0 0 0 8px rgba(61,220,132,.15)}
+}
+
+/* ── Logo scan pulse (AI working) ── */
+.g-logo svg{transition:filter .3s;}
+.g-logo.scanning svg{
+  animation:logo-pulse .8s ease-in-out infinite alternate;
+}
+@keyframes logo-pulse{
+  from{filter:drop-shadow(0 0 4px rgba(61,220,132,.4))}
+  to  {filter:drop-shadow(0 0 16px rgba(61,220,132,.9))}
+}
+
+/* ── Lot counter badge ── */
+.g-lot-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(61,220,132,.1);border:1px solid rgba(61,220,132,.3);
+  border-radius:20px;padding:5px 12px;
+  font-family:var(--fm);font-size:11px;color:var(--green);
+  margin-bottom:2px;
+}
+.g-lot-dot{width:7px;height:7px;border-radius:50%;background:var(--green);}
+
+/* LINE TYPE GRID */
+.lt-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.lt-btn{
+  background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);
+  padding:8px 6px;cursor:pointer;font-family:var(--fh);font-size:10px;letter-spacing:1px;
+  text-transform:uppercase;text-align:center;transition:all .15s;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  -webkit-user-select:none;user-select:none;
+}
+.lt-btn .lt-icon{font-size:16px;line-height:1}
+.lt-btn .lt-name{color:var(--text-dim);font-size:9px}
+.lt-btn .lt-w{color:var(--text-dim);font-family:var(--fm);font-size:9px}
+.lt-btn:hover,.lt-btn.active{border-color:var(--accent);background:rgba(245,200,66,.08)}
+.lt-btn.active .lt-name,.lt-btn.active .lt-icon{color:var(--accent)}
+/* Map line preview strip */
+.lt-btn .lt-stripe{width:32px;height:3px;border-radius:2px;margin-top:2px}
+/* Type breakdown row */
+.td-row{
+  display:flex;align-items:center;gap:7px;
+  background:var(--ink-soft);border:1px solid var(--border);
+  border-radius:var(--r);padding:6px 9px;font-size:11px;
+}
+.td-swatch{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.td-name{flex:1;color:var(--text);font-size:10px}
+.td-ft{font-family:var(--fm);font-size:10px;color:var(--accent2);white-space:nowrap}
+.td-gal{font-family:var(--fm);font-size:10px;color:var(--green);white-space:nowrap}
+
+/* TILE TOGGLE — compact switch in sidebar header */
+#tile-toggle{
+  display:flex;border-radius:12px;overflow:hidden;
+  border:1px solid var(--border);flex-shrink:0;
+}
+.tile-opt{
+  font-size:13px;padding:3px 8px;border:none;cursor:pointer;
+  background:var(--ink-soft);color:var(--text-dim);
+  transition:all .15s;-webkit-user-select:none;user-select:none;
+  line-height:1;
+}
+.tile-opt.on{background:var(--accent);color:var(--ink);}
+.tile-opt:hover:not(.on){color:var(--text);}
+
+/* BY-LINE credit */
+#by-line{
+  position:fixed;bottom:10px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:6px;
+  z-index:600;pointer-events:none;
+  opacity:0.5;transition:opacity .2s;
+}
+#by-line:hover{opacity:1;}
+/* Also push Leaflet attribution up slightly so it doesn't overlap by-line on mobile */
+.leaflet-control-attribution{
+  margin-bottom:0!important;
+  font-size:9px!important;
+  background:rgba(10,11,15,0.7)!important;
+  color:var(--text-dim)!important;
+  backdrop-filter:blur(4px);
+}
+
+/* Mobile */
+@media(max-width:700px){
+  #sidebar{width:100%;position:absolute;bottom:0;left:0;height:50vh;border-left:none;border-top:2px solid var(--accent);z-index:500;box-shadow:0 -4px 24px rgba(0,0,0,.5)}
+  #search-input{width:100px}
+  .logo-text{font-size:15px}
+  .s-tab{font-size:9px;padding:8px 2px}
+}
+
+/* ═══════════════════════════════════════════
+   GUIDED MODE
+═══════════════════════════════════════════ */
+#guided{
+  position:absolute;inset:0;z-index:800;
+  pointer-events:none;
+  display:none;
+}
+.g-screen{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:flex-end;
+  opacity:0;pointer-events:none;
+  transition:opacity .35s ease;
+}
+#s-welcome.active{
+  opacity:1;pointer-events:all;
+  background:rgba(10,11,15,.88);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  justify-content:center;
+}
+#s-scan.active,
+#s-whatpaint.active,
+#s-results.active,
+#s-refine.active{
+  opacity:1;pointer-events:none; /* map stays live */
+}
+/* Only floating cards catch touches */
+#s-scan.active .g-float,
+#s-scan.active .g-float *,
+#s-whatpaint.active .g-float,
+#s-whatpaint.active .g-float *,
+#s-results.active .g-float,
+#s-results.active .g-float *,
+#s-refine.active .g-float,
+#s-refine.active .g-float *{
+  pointer-events:all;
+}
+
+/* ── Expert pill ── */
+#btn-advanced{
+  position:absolute;top:16px;right:16px;z-index:850;
+  font-family:var(--fh);font-size:10px;letter-spacing:1px;
+  padding:8px 16px;border:1px solid rgba(255,255,255,.12);border-radius:20px;
+  background:rgba(10,11,15,.75);color:var(--text-dim);cursor:pointer;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  transition:all .2s;display:none;pointer-events:all;
+  -webkit-user-select:none;user-select:none;
+}
+#btn-advanced.show{display:block;}
+#btn-advanced:hover{border-color:var(--accent);color:var(--accent);}
+#btn-guided-return{margin-left:2px;}
+
+/* ── Animations ── */
+@keyframes g-up{
+  from{transform:translateY(20px);opacity:0}
+  to{transform:none;opacity:1}
+}
+@keyframes g-slideup{
+  from{transform:translateY(100%)}
+  to{transform:none}
+}
+@keyframes g-fadein{
+  from{opacity:0} to{opacity:1}
+}
+
+/* ── Welcome card — centered, full backdrop ── */
+.g-card{
+  background:var(--ink-soft);border:1px solid var(--border);border-radius:20px;
+  padding:32px 26px;width:min(420px,92vw);
+  display:flex;flex-direction:column;gap:16px;
+  box-shadow:0 32px 80px rgba(0,0,0,.7);
+  animation:g-up .45s cubic-bezier(.22,1,.36,1) both;
+  position:relative;
+}
+
+/* ── Masonic corner icon ── */
+.g-masonic-inline{display:inline-flex;align-items:center;vertical-align:middle;margin-right:-8px;position:relative;z-index:2;}
+.g-masonic-inline svg{
+  animation:masonic-spin 10s linear infinite, masonic-glitch 3.5s steps(1) infinite;
+  display:inline-block;overflow:visible;
+}
+.g-masonic-hero{display:flex;justify-content:center;margin-bottom:-4px;}
+.g-masonic-hero svg{
+  overflow:visible;
+  animation:masonic-spin 10s linear infinite, masonic-glitch 3.5s steps(1) infinite;
+  filter:drop-shadow(0 0 6px rgba(61,220,132,.4));
+}
+.g-byline{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  font-size:10px;color:var(--text-dim);font-family:var(--fm);
+  letter-spacing:1px;text-transform:uppercase;opacity:.75;
+  margin-top:-8px;
+}
+.g-byline svg{ opacity:1; }
+@keyframes masonic-spin{
+  from{transform:rotate(0deg)} to{transform:rotate(360deg)}
+}
+@keyframes masonic-glitch{
+  0%,85%  {filter:none;}
+  86%     {filter:drop-shadow(4px 0 0 rgba(61,220,132,1)) drop-shadow(-4px 0 0 rgba(245,200,66,1));transform:translate(3px,-2px)}
+  88%     {filter:none;transform:translate(-3px,2px)}
+  90%     {filter:drop-shadow(-4px 0 0 rgba(61,220,132,1)) drop-shadow(2px 0 0 rgba(245,200,66,.8));transform:translate(1px,-1px)}
+  92%     {filter:none;transform:translate(0)}
+  93%     {filter:drop-shadow(3px 0 0 rgba(245,200,66,1));transform:translate(-2px,1px)}
+  95%,100%{filter:none;transform:translate(0)}
+}
+.g-logo{display:flex;justify-content:center;}
+.g-title{
+  font-family:var(--fh);font-size:24px;font-weight:700;
+  letter-spacing:2px;color:var(--accent);text-transform:uppercase;text-align:center;
+}
+.g-sub{font-size:13px;color:var(--accent);text-align:center;line-height:1.7;}
+.g-searchbar{
+  display:flex;background:var(--steel);border:1px solid var(--border);
+  border-radius:var(--r);overflow:hidden;transition:border-color .15s;
+}
+.g-searchbar:focus-within{border-color:var(--accent);}
+#g-input{
+  flex:1;background:transparent;border:none;outline:none;
+  color:var(--text);font-family:var(--fb);font-size:14px;padding:12px 14px;
+}
+#g-input::placeholder{color:var(--text-dim);}
+#g-search-btn{
+  background:var(--accent);border:none;color:var(--ink);
+  cursor:pointer;padding:12px 18px;font-size:18px;
+  font-family:var(--fh);font-weight:700;transition:background .15s;
+}
+#g-search-btn:hover{background:#ffd966;}
+.g-results{display:flex;flex-direction:column;gap:4px;max-height:150px;overflow-y:auto;}
+.g-result{
+  padding:9px 12px;background:var(--steel);border:1px solid var(--border);
+  border-radius:var(--r);font-size:12px;color:var(--text);cursor:pointer;
+  transition:all .15s;line-height:1.4;
+}
+.g-result:hover{border-color:var(--accent);color:var(--accent);}
+.g-or{
+  display:flex;align-items:center;gap:10px;
+  color:var(--text-dim);font-size:11px;
+}
+.g-or::before,.g-or::after{content:'';flex:1;height:1px;background:var(--border);}
+#g-locate-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:12px;background:var(--steel);border:1px solid var(--border);
+  border-radius:var(--r);color:var(--text-dim);cursor:pointer;
+  font-family:var(--fh);font-size:11px;letter-spacing:1px;text-transform:uppercase;
+  transition:all .18s;-webkit-user-select:none;user-select:none;
+}
+#g-locate-btn:hover{border-color:var(--blue);color:var(--blue);}
+
+/* ── Floating card — bottom sheet over map ── */
+.g-float{
+  width:100%;max-width:520px;
+  background:var(--ink-soft);
+  border:1px solid var(--border);
+  border-radius:20px 20px 0 0;
+  padding:24px 24px 36px;
+  display:flex;flex-direction:column;gap:14px;
+  box-shadow:0 -8px 40px rgba(0,0,0,.5);
+  animation:g-slideup .4s cubic-bezier(.22,1,.36,1) both;
+}
+.g-float-handle{
+  width:36px;height:4px;background:var(--muted);
+  border-radius:2px;margin:0 auto -4px;
+}
+.g-float-title{
+  font-family:var(--fh);font-size:17px;font-weight:600;
+  letter-spacing:1px;color:var(--text);
+}
+.g-float-sub{
+  font-size:13px;color:var(--text-dim);line-height:1.65;
+}
+.g-float-meta{
+  font-family:var(--fm);font-size:11px;color:var(--accent);
+  background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.2);
+  border-radius:var(--r);padding:8px 12px;
+}
+.g-float-actions{display:flex;flex-direction:column;gap:8px;}
+.g-float-row{display:flex;gap:8px;}
+.g-float-row .btn{flex:1;}
+
+/* ── Scanning pill — top of map ── */
+.g-scanning-pill{
+  position:absolute;top:20px;left:50%;transform:translateX(-50%);
+  background:rgba(10,11,15,.85);border:1px solid rgba(245,200,66,.3);
+  border-radius:20px;padding:10px 20px;
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--fh);font-size:11px;letter-spacing:1px;color:var(--accent);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  animation:g-fadein .3s ease;pointer-events:none;
+  white-space:nowrap;
+}
+.g-scanning-pill .spin{
+  width:12px;height:12px;border:2px solid rgba(245,200,66,.3);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin .7s linear infinite;flex-shrink:0;
+}
+
+/* ── What to do — job type chips ── */
+.g-job-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+}
+.g-job-chip{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:14px 10px;background:var(--steel);
+  border:2px solid var(--border);border-radius:12px;
+  cursor:pointer;transition:all .18s;
+  -webkit-user-select:none;user-select:none;
+}
+.g-job-chip.checked{
+  border-color:var(--accent);background:rgba(245,200,66,.08);
+}
+.g-job-chip-icon{font-size:24px;line-height:1;}
+.g-job-chip-label{
+  font-family:var(--fh);font-size:11px;letter-spacing:.5px;
+  color:var(--text-dim);text-align:center;
+}
+.g-job-chip.checked .g-job-chip-label{color:var(--accent);}
+
+/* ── Results numbers ── */
+.g-results-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+}
+.g-result-box{
+  background:var(--steel);border:1px solid var(--border);
+  border-radius:10px;padding:12px;text-align:center;
+}
+.g-result-val{
+  font-family:var(--fh);font-size:22px;color:var(--accent);
+}
+.g-result-lbl{
+  font-size:10px;color:var(--text-dim);margin-top:2px;
+  font-family:var(--fm);letter-spacing:.5px;
+}
+
+/* ── Step dots ── */
+.g-stepdots{
+  display:flex;justify-content:center;gap:6px;
+}
+.g-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--muted);transition:all .3s;
+}
+.g-dot.active{background:var(--accent);transform:scale(1.3);}
+.g-dot.done{background:var(--green);}
+
+.draw-point-counter{
+  font-family:var(--fm);font-size:13px;color:var(--green);
+  text-align:center;padding:4px 0;
+}
+.draw-point-counter span{font-size:20px;font-weight:700;}
+
+/* ── Map rotate row ── */
+.map-rotate-row{
+  display:flex;align-items:center;gap:8px;
+  background:var(--steel);border:1px solid var(--border);
+  border-radius:var(--r);padding:8px 12px;
+}
+.map-rotate-label{
+  font-size:10px;color:var(--text-dim);font-family:var(--fm);
+  text-transform:uppercase;letter-spacing:1px;flex:1;
+}
+.map-rot-btn{
+  width:34px;height:34px;background:var(--ink-soft);
+  border:1px solid var(--border);border-radius:var(--r);
+  color:var(--accent);font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s;-webkit-user-select:none;user-select:none;
+}
+.map-rot-btn:hover{ background:rgba(245,200,66,.1); }
+.map-rot-reset{ color:var(--text-dim);font-size:13px; }
+.map-rot-deg{
+  font-family:var(--fm);font-size:13px;color:var(--green);
+  min-width:36px;text-align:center;
+}
+#s-stalls-layout.active{ opacity:1; pointer-events:none; }
+#s-stalls-layout.active .g-float,
+#s-stalls-layout.active .g-float *,
+#s-stalls-layout.active .g-scanning-pill{ pointer-events:all; }
+
+/* Stall size prompt */
+.stall-size-row{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;
+}
+.stall-size-field label{
+  font-size:10px;color:var(--text-dim);text-transform:uppercase;
+  letter-spacing:1px;font-family:var(--fm);display:block;margin-bottom:6px;
+}
+.stall-size-btns{
+  display:flex;gap:6px;
+}
+.stall-sz-btn{
+  flex:1;padding:8px 4px;background:var(--steel);border:1px solid var(--border);
+  border-radius:var(--r);color:var(--text-dim);cursor:pointer;
+  font-family:var(--fh);font-size:13px;transition:all .15s;
+  -webkit-user-select:none;user-select:none;
+}
+.stall-sz-btn.active{
+  background:rgba(61,220,132,.12);border-color:var(--green);color:var(--green);
+}
+.stall-size-preview{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 12px;background:var(--steel);border-radius:var(--r);
+}
+.ssp-box{
+  width:28px;height:50px;border:2px solid var(--green);
+  border-radius:3px;background:rgba(61,220,132,.1);flex-shrink:0;
+  transition:all .2s;
+}
+.ssp-label{
+  font-family:var(--fm);font-size:11px;color:var(--text-dim);line-height:1.6;
+}
+
+/* Stall controls */
+.stall-ctrl-row{
+  display:flex;align-items:flex-end;gap:12px;
+}
+.stall-ctrl-group{
+  display:flex;flex-direction:column;gap:5px;
+}
+.stall-ctrl-group label{
+  font-size:9px;color:var(--text-dim);text-transform:uppercase;
+  letter-spacing:1px;font-family:var(--fm);
+}
+.stall-num-wrap{
+  display:flex;align-items:center;gap:0;
+  background:var(--steel);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;
+}
+.stall-num-btn{
+  width:36px;height:36px;background:transparent;border:none;
+  color:var(--accent);font-size:18px;cursor:pointer;
+  font-family:var(--fh);transition:background .15s;
+  -webkit-user-select:none;user-select:none;
+}
+.stall-num-btn:hover{ background:rgba(245,200,66,.1); }
+#stall-count-input{
+  width:54px;background:transparent;border:none;outline:none;
+  color:var(--text);font-family:var(--fh);font-size:18px;
+  text-align:center;padding:0;
+}
+.stall-size-display{
+  padding:8px 12px;background:var(--steel);border:1px solid var(--border);
+  border-radius:var(--r);font-family:var(--fm);font-size:13px;color:var(--green);
+  white-space:nowrap;
+}
+.stall-snap-toggle{
+  padding:8px 12px;background:var(--steel);border:1px solid var(--border);
+  border-radius:var(--r);font-family:var(--fh);font-size:11px;color:var(--text-dim);
+  cursor:pointer;transition:all .15s;-webkit-user-select:none;user-select:none;
+  letter-spacing:.5px;
+}
+.stall-snap-toggle.active{
+  background:rgba(61,220,132,.1);border-color:var(--green);color:var(--green);
+}
+.stall-live-stats{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  font-family:var(--fm);font-size:11px;color:var(--text-dim);
+  padding:6px 0 2px;
+}
+#stall-live-count{ color:var(--green); }
+#stall-live-ft,#stall-live-sqft{ color:var(--accent); }
+
+/* Stall polygons on map — dead zones */
+.stall-dead path{ opacity:.35 !important; }
+
+/* Roller sweep animation */
+@keyframes stall-sweep{
+  from{ clip-path:inset(0 100% 0 0); }
+  to{   clip-path:inset(0 0% 0 0); }
+}
+.wp-list{ display:flex;flex-direction:column;gap:5px; }
+.wp-item{
+  display:flex;align-items:center;gap:10px;padding:9px 12px;
+  background:var(--steel);border:1px solid var(--border);border-radius:var(--r);
+  cursor:pointer;transition:all .15s;-webkit-user-select:none;user-select:none;
+}
+.wp-item.checked{
+  border-color:var(--accent);background:rgba(245,200,66,.06);
+}
+.wp-check{
+  width:18px;height:18px;border-radius:4px;border:2px solid var(--muted);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  font-size:11px;color:transparent;transition:all .15s;
+}
+.wp-item.checked .wp-check{
+  background:var(--accent);border-color:var(--accent);color:var(--ink);
+}
+.wp-icon{ font-size:17px;flex-shrink:0; }
+.wp-info{ flex:1; }
+.wp-name{
+  font-family:var(--fh);font-size:13px;color:var(--text);letter-spacing:.5px;
+}
+.wp-desc{ font-size:10px;color:var(--text-dim); }
+.wp-swatch{ width:26px;height:4px;border-radius:2px;flex-shrink:0; }
+.wp-divider{ border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:8px; }
+.wp-opt-lbl{
+  font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;
+}
+.wp-rs{ display:flex;gap:6px; }
+.wp-rs-btn{
+  flex:1;padding:7px 6px;background:var(--steel);border:1px solid var(--border);
+  border-radius:var(--r);font-family:var(--fh);font-size:10px;letter-spacing:1px;
+  color:var(--text-dim);cursor:pointer;text-align:center;transition:all .15s;
+  -webkit-user-select:none;user-select:none;
+}
+.wp-rs-btn.active{
+  background:var(--accent);border-color:var(--accent);color:var(--ink);
+}
+
+/* ─── S3: Walk & Trace ────────────────────── */
+#s-trace .g-top{
+  position:absolute;top:0;left:0;right:0;
+  background:linear-gradient(to bottom,rgba(10,11,15,.92) 70%,transparent);
+  padding:16px 16px 32px;display:flex;flex-direction:column;gap:8px;align-items:center;
+}
+#s-trace .g-bottom{
+  position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(to top,rgba(10,11,15,.94) 80%,transparent);
+  padding:28px 16px 20px;display:flex;flex-direction:column;gap:10px;align-items:center;
+}
+.type-pill{
+  display:flex;align-items:center;gap:8px;
+  background:rgba(10,11,15,.85);border:1px solid rgba(255,255,255,.1);
+  border-radius:20px;padding:8px 18px;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.type-dot{ width:10px;height:10px;border-radius:50%;flex-shrink:0; }
+.type-name{
+  font-family:var(--fh);font-size:12px;letter-spacing:1px;
+  color:var(--text);text-transform:uppercase;
+}
+.type-w{ font-family:var(--fm);font-size:10px;color:var(--text-dim);margin-left:2px; }
+.trace-hint{
+  font-size:11px;color:rgba(205,210,232,.6);text-align:center;line-height:1.5;
+}
+.trace-prog{ display:flex;gap:6px;align-items:center; }
+.tp-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--muted);transition:all .2s;
+}
+.tp-dot.done{ background:var(--green); }
+.tp-dot.active{ background:var(--accent);box-shadow:0 0 8px rgba(245,200,66,.5); }
+.trace-stats{ display:flex;gap:20px;align-items:center; }
+.ts-item{ text-align:center; }
+.ts-val{
+  font-family:var(--fm);font-size:18px;color:var(--accent);
+  font-weight:600;line-height:1;
+}
+.ts-lbl{
+  font-size:9px;color:var(--text-dim);text-transform:uppercase;
+  letter-spacing:1px;margin-top:3px;
+}
+.trace-btns{ display:flex;gap:8px;width:100%;max-width:380px; }
+
+/* GPS dot on map */
+#gps-dot{
+  width:16px;height:16px;border-radius:50%;background:var(--blue);
+  border:2.5px solid #fff;box-shadow:0 0 0 4px rgba(91,164,245,.3);
+  position:absolute;transform:translate(-50%,-50%);
+  pointer-events:none;z-index:600;display:none;
+}
+#gps-dot.active{ display:block;animation:gps-pulse 1.8s ease-in-out infinite; }
+@keyframes gps-pulse{
+  0%,100%{ box-shadow:0 0 0 4px rgba(91,164,245,.3); }
+  50%{ box-shadow:0 0 0 10px rgba(91,164,245,.08); }
+}
+/* GPS accuracy ring */
+#gps-accuracy{
+  position:absolute;border-radius:50%;
+  border:1px solid rgba(91,164,245,.35);
+  background:rgba(91,164,245,.05);
+  transform:translate(-50%,-50%);
+  pointer-events:none;z-index:599;display:none;
+}
+#gps-accuracy.active{ display:block; }
+
+/* ─── S4: Estimate ────────────────────────── */
+#s-estimate{
+  background:rgba(10,11,15,.88);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  padding:12px 0;overflow-y:auto;
+}
+.est-card{
+  background:var(--ink-soft);border:1px solid var(--border);border-radius:16px;
+  padding:22px 18px;width:min(440px,94vw);
+  display:flex;flex-direction:column;gap:14px;
+  box-shadow:0 24px 56px rgba(0,0,0,.6);
+  animation:g-up .4s cubic-bezier(.22,1,.36,1) both;margin:auto;
+}
+.est-title{
+  font-family:var(--fh);font-size:16px;letter-spacing:2px;
+  color:var(--accent);text-transform:uppercase;text-align:center;
+}
+.est-hero{
+  background:var(--steel);border:1px solid var(--border);
+  border-radius:var(--r);padding:16px;display:flex;justify-content:space-around;
+}
+.est-num{ text-align:center; }
+.est-num .ev{
+  font-family:var(--fm);font-size:30px;font-weight:600;
+  color:var(--green);line-height:1;
+}
+.est-num .eu{
+  font-size:10px;color:var(--text-dim);text-transform:uppercase;
+  letter-spacing:1px;margin-top:4px;
+}
+.est-bkd{ display:flex;flex-direction:column;gap:5px; }
+.est-row{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;
+  background:var(--steel);border:1px solid var(--border);border-radius:var(--r);
+}
+.est-sw{ width:8px;height:8px;border-radius:2px;flex-shrink:0; }
+.est-rname{ flex:1;font-size:11px;color:var(--text); }
+.est-rft{ font-family:var(--fm);font-size:10px;color:var(--text-dim); }
+.est-rgal{ font-family:var(--fm);font-size:11px;color:var(--accent2);font-weight:600; }
+.labour-wrap{ display:flex;flex-direction:column;gap:6px; }
+.labour-row{
+  display:flex;align-items:center;gap:8px;
+  background:var(--steel);border:1px solid var(--border);
+  border-radius:var(--r);padding:10px;
+}
+.labour-row label{ font-size:11px;color:var(--text-dim);flex:1; }
+.labour-row input{
+  background:var(--ink-soft);border:1px solid var(--border);
+  border-radius:var(--r);padding:5px 8px;color:var(--text);
+  font-family:var(--fm);font-size:13px;outline:none;
+  width:90px;text-align:right;transition:border-color .15s;
+}
+.labour-row input:focus{ border-color:var(--accent); }
+.est-total-box{
+  background:rgba(61,220,132,.07);border:1px solid rgba(61,220,132,.2);
+  border-radius:var(--r);padding:16px;text-align:center;
+}
+.est-total-box .etv{
+  font-family:var(--fm);font-size:34px;font-weight:600;color:var(--green);line-height:1;
+}
+.est-total-box .etl{
+  font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-top:4px;
+}
+.est-btns{ display:flex;flex-direction:column;gap:6px; }
+</style>
+</head>
+<body class="guided-mode">
+
+<!-- ══════════════════════════════════
+     TOPBAR
+══════════════════════════════════ -->
+<div id="topbar">
+  <!-- App name -->
+  <div class="logo">
+    <div class="logo-text">Plot <span style="font-size:12px;font-weight:400;color:var(--text-dim);letter-spacing:1px">PRO</span></div>
+  </div>
+
+  <div class="tb-gap"></div>
+
+  <!-- Long-press scan / tap detect button -->
+  <button class="tb-btn" id="detect-btn" title="Tap for single detect · Hold to enter scan mode">🅿 Scan Lot</button>
+
+  <div id="search-wrap">
+    <input type="text" id="search-input" placeholder="Search address…"/>
+    <button id="search-btn" aria-label="Search">⌖</button>
+  </div>
+
+  <button class="tb-btn" id="reset-btn" title="Clear everything and start fresh">↺ Reset</button>
+  <button class="tb-btn" id="btn-guided-return">▶ Guided</button>
+</div>
+
+<!-- ══════════════════════════════════
+     MAP + SIDEBAR
+══════════════════════════════════ -->
+<div id="main">
+
+  <!-- Map -->
+  <div id="map">
+
+    <!-- Scan HUD pill -->
+    <div id="scan-hud">
+      <span class="hud-dot"></span>
+      <span id="scan-hud-text">Scanning…</span>
+    </div>
+
+    <!-- Stall placement banner -->
+    <div id="place-banner">Tap map to place stall row · Esc to stop</div>
+
+  </div>
+
+  <!-- ════════════════════════════
+       SIDEBAR
+  ════════════════════════════ -->
+  <div id="sidebar">
+    <div class="s-head">
+      <h2>Estimator</h2>
+      <!-- Map style toggle -->
+      <div id="tile-toggle">
+        <button id="tile-btn" class="tile-opt on">🛰</button>
+        <button id="tile-btn-osm" class="tile-opt">🗺</button>
+      </div>
+      <span class="badge">Stage 1–3</span>
+    </div>
+    <div class="s-tabs">
+      <button class="s-tab active" data-tab="tab-lot">📐 Lot</button>
+      <button class="s-tab"        data-tab="tab-stalls">🚗 Stalls</button>
+      <button class="s-tab"        data-tab="tab-lines">✏️ Lines</button>
+      <button class="s-tab"        data-tab="tab-paint">🎨 Paint</button>
+      <button class="s-tab"        data-tab="tab-layers">🗂 Layers</button>
+    </div>
+
+    <!-- TAB: LOT -->
+    <div class="s-panel active" id="tab-lot">
+      <div class="ibox">
+        <strong>Tap &amp; hold</strong> any parking lot on the map to scan and auto-detect its boundary.<br><br>
+        <strong>Quick tap</strong> after pressing <strong>🅿 Scan Lot</strong> for instant single detect.<br><br>
+        <strong>Manual:</strong> Use the polygon tool (pentagon icon, map toolbar).
+      </div>
+
+      <!-- Scan result appears here -->
+      <div id="scan-result-wrap"></div>
+
+      <div class="card" id="lot-card">
+        <div class="card-hd"><span class="dot"></span>Lot Measurements</div>
+        <div class="card-bd">
+          <div class="sg">
+            <div class="sb wide"><div class="lbl">Total Area</div><div class="val" id="r-sqft">—</div><div class="unt">sq ft</div></div>
+            <div class="sb"><div class="lbl">Sq Meters</div><div class="val" id="r-sqm" style="font-size:13px">—</div><div class="unt">m²</div></div>
+            <div class="sb"><div class="lbl">Acres</div><div class="val" id="r-acres" style="font-size:13px">—</div><div class="unt">ac</div></div>
+            <div class="sb wide warn"><div class="lbl">Perimeter</div><div class="val" id="r-perim" style="font-size:13px">—</div><div class="unt">linear ft</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: STALLS -->
+    <div class="s-panel" id="tab-stalls">
+      <div class="ibox">
+        <strong>Activate placement</strong>, then tap the map to drop stall rows. Press <strong>Esc</strong> to stop.
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--accent2)"></span>Parking Angle</div>
+        <div class="card-bd">
+          <div class="ang-grid">
+            <button class="ang-btn active" data-angle="90"><span class="ai">⬆</span>90° Standard</button>
+            <button class="ang-btn"        data-angle="60"><span class="ai">↗</span>60° Angled</button>
+            <button class="ang-btn"        data-angle="45"><span class="ai">↗</span>45° Diagonal</button>
+            <button class="ang-btn"        data-angle="0" ><span class="ai">➡</span>0° Parallel</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot"></span>Stall Dimensions</div>
+        <div class="card-bd">
+          <div class="fr2">
+            <div class="field"><label>Width (ft)</label><input type="number" id="stall-w" value="9" min="7" max="14" step="0.5"/></div>
+            <div class="field"><label>Depth (ft)</label><input type="number" id="stall-d" value="18" min="14" max="24" step="0.5"/></div>
+          </div>
+          <div class="fr2">
+            <div class="field"><label>Per Row</label><input type="number" id="stalls-per-row" value="8" min="1" max="40" step="1"/></div>
+            <div class="field"><label>Row Rotation °</label><input type="number" id="row-rotation" value="0" min="-180" max="180" step="5"/></div>
+          </div>
+          <div class="field"><label>Aisle Width (ft)</label><input type="number" id="aisle-width" value="24" min="12" max="40" step="1"/></div>
+          <div class="field"><label>Row Label</label><input type="text" id="row-label" placeholder="Row A, North Section…"/></div>
+          <div style="background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:7px 9px;font-size:11px;color:var(--text-dim)">
+            <span id="stall-dim" style="color:var(--text);font-family:var(--fm)">9×18 ft</span> ·
+            <span id="stall-area-ft" style="color:var(--accent);font-family:var(--fm)">162 ft²</span> ·
+            Row: <span id="stall-row-info" style="color:var(--accent2);font-family:var(--fm)">8 stalls / 234 ln ft</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--green)"></span>Placement</div>
+        <div class="card-bd">
+          <button class="btn btn-g btn-full" id="place-btn">🚗 Activate Placement</button>
+          <button class="btn btn-r btn-full" id="cancel-place-btn" style="display:none">✕ Stop Placing (Esc)</button>
+          <hr class="div"/>
+          <button class="btn btn-o btn-full btn-sm" id="clear-stalls-btn">🗑 Clear Stall Rows</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--blue)"></span>Stall Summary</div>
+        <div class="card-bd">
+          <div class="sg">
+            <div class="sb hi"><div class="lbl">Total Stalls</div><div class="val" id="s-stalls">0</div><div class="unt">spaces</div></div>
+            <div class="sb blue"><div class="lbl">Rows</div><div class="val" id="s-rows">0</div><div class="unt">placed</div></div>
+            <div class="sb wide warn"><div class="lbl">Total Line Footage</div><div class="val" id="s-lineft">0</div><div class="unt">linear ft</div></div>
+            <div class="sb wide"><div class="lbl">Est. Aisle Area</div><div class="val" id="s-aisle" style="font-size:13px">—</div><div class="unt">sq ft</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: LINES (Stage 3) -->
+    <div class="s-panel" id="tab-lines">
+      <div class="ibox">
+        <strong>Trace actual paint lines</strong> on the satellite image for a precise estimate.<br><br>
+        Pick a line type, tap <strong>Draw Line</strong>, then click each point on the map. <strong>Double-click</strong> to finish. Lines are fully editable after drawing.
+      </div>
+
+      <!-- Line type picker -->
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--accent)"></span>Line Type</div>
+        <div class="card-bd" style="padding:8px;gap:6px">
+          <div class="lt-grid" id="lt-grid">
+            <!-- injected by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Active line config -->
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--accent2)"></span>Line Settings</div>
+        <div class="card-bd">
+          <div class="fr2">
+            <div class="field">
+              <label>Width (in)</label>
+              <input type="number" id="lt-width" value="4" min="1" max="48" step="0.5"/>
+            </div>
+            <div class="field">
+              <label>Label</label>
+              <input type="text" id="lt-label" placeholder="optional…"/>
+            </div>
+          </div>
+          <div style="background:var(--ink-soft);border:1px solid var(--border);border-radius:var(--r);padding:7px 9px;font-size:11px;color:var(--text-dim)">
+            Active: <span id="lt-active-name" style="color:var(--accent);font-family:var(--fm)">Stall Divider</span>
+            &nbsp;·&nbsp; <span id="lt-active-width" style="color:var(--accent2);font-family:var(--fm)">4"</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Draw / stop -->
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--green)"></span>Draw</div>
+        <div class="card-bd">
+          <button class="btn btn-g btn-full" id="lt-draw-btn">✏️ Draw Line</button>
+          <button class="btn btn-r btn-full" id="lt-stop-btn" style="display:none">✕ Stop Drawing (Esc)</button>
+          <hr class="div"/>
+          <button class="btn btn-o btn-full btn-sm" id="lt-clear-btn">🗑 Clear All Lines</button>
+        </div>
+      </div>
+
+      <!-- Lines summary by type -->
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--blue)"></span>Line Summary</div>
+        <div class="card-bd">
+          <div class="sg">
+            <div class="sb wide hi">
+              <div class="lbl">Total Traced Footage</div>
+              <div class="val" id="lt-total-ft">0</div>
+              <div class="unt">linear ft</div>
+            </div>
+          </div>
+          <div id="lt-breakdown" style="display:flex;flex-direction:column;gap:4px;margin-top:2px">
+            <div style="font-size:10px;color:var(--text-dim);text-align:center;padding:4px">No lines traced yet.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Drawn line list -->
+      <div class="card">
+        <div class="card-hd"><span class="dot"></span>Traced Lines <span id="lt-count" style="margin-left:auto;font-size:9px;color:var(--text-dim)">0</span></div>
+        <div class="card-bd" style="padding:8px">
+          <div class="ll" id="lt-list">
+            <div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No lines yet.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: PAINT -->
+    <div class="s-panel" id="tab-paint">
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--accent2)"></span>Paint Specs</div>
+        <div class="card-bd">
+          <div class="field">
+            <label>Paint Type</label>
+            <select id="paint-type">
+              <option value="latex"  data-cov="320">Water-Based Latex (320 ft²/gal)</option>
+              <option value="oil"    data-cov="280">Oil-Based Alkyd (280 ft²/gal)</option>
+              <option value="epoxy"  data-cov="200">Epoxy 2-Part (200 ft²/gal)</option>
+              <option value="thermo" data-cov="100">Thermoplastic (100 ft²/gal)</option>
+            </select>
+          </div>
+          <div class="fr2">
+            <div class="field"><label>Line Width (in)</label><input type="number" id="line-width" value="4" min="1" max="48" step="0.5"/></div>
+            <div class="field"><label>Coverage (ft²/gal)</label><input type="number" id="coverage-rate" value="320" min="50" max="1000" step="10"/></div>
+          </div>
+          <div class="fr2">
+            <div class="field"><label>Waste (%)</label><input type="number" id="waste-pct" value="10" min="0" max="50" step="1"/></div>
+            <div class="field"><label>Coats</label><input type="number" id="coats" value="1" min="1" max="4" step="1"/></div>
+          </div>
+          <div class="field">
+            <label>Estimate Source</label>
+            <select id="estimate-mode">
+              <option value="auto">Auto (best available)</option>
+              <option value="traced">Traced Lines (Stage 3)</option>
+              <option value="stalls">Stall Lines only</option>
+              <option value="perimeter">Lot Perimeter</option>
+              <option value="full">Full Surface Coat</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--green)"></span>Paint Estimate</div>
+        <div class="card-bd">
+          <div class="sg">
+            <div class="sb wide hi"><div class="lbl">Gallons Required</div><div class="val" id="r-gallons">—</div><div class="unt">incl. waste + coats</div></div>
+            <div class="sb warn"><div class="lbl">Linear Ft Painted</div><div class="val" id="r-linear" style="font-size:12px">—</div><div class="unt">ft</div></div>
+            <div class="sb"><div class="lbl">Paint Area</div><div class="val" id="r-paint-area" style="font-size:12px">—</div><div class="unt">ft²</div></div>
+          </div>
+          <div class="formula" id="r-formula">Draw a lot or place stalls to calculate.</div>
+          <!-- Per-type breakdown (shown when traced lines exist) -->
+          <div id="r-type-breakdown" style="display:none;flex-direction:column;gap:4px"></div>
+          <button class="btn btn-y btn-full" id="recalc-btn">↻ Recalculate</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: LAYERS -->
+    <div class="s-panel" id="tab-layers">
+      <div class="card">
+        <div class="card-hd"><span class="dot"></span>Lot Shapes <span id="shape-count" style="margin-left:auto;font-size:9px;color:var(--text-dim)">0</span></div>
+        <div class="card-bd" style="padding:8px">
+          <div class="ll" id="shape-list"><div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No shapes yet.</div></div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn btn-r btn-sm btn-full" id="clear-shapes-btn">✕ Clear</button>
+            <button class="btn btn-o btn-sm btn-full" id="save-btn">💾 Save</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--accent2)"></span>Stall Rows <span id="stall-count" style="margin-left:auto;font-size:9px;color:var(--text-dim)">0</span></div>
+        <div class="card-bd" style="padding:8px">
+          <div class="ll" id="stall-list"><div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No rows placed.</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><span class="dot" style="background:var(--green)"></span>Traced Lines <span id="lt-count-layers" style="margin-left:auto;font-size:9px;color:var(--text-dim)">0</span></div>
+        <div class="card-bd" style="padding:8px">
+          <div class="ll" id="lt-list-layers"><div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No lines traced.</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-bd">
+          <div class="fr2">
+            <button class="btn btn-o btn-sm" id="load-btn">📂 Load</button>
+            <button class="btn btn-o btn-sm" id="export-btn">⬆ Export</button>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim)">Auto-saved on every change.</div>
+        </div>
+      </div>
+      <div class="cs"><strong>🛣 Roadway & Highway Mode — Stage 4</strong>Lane polylines · MUTCD dash presets · OSM highway detect</div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- ════════════════════════════════════════════════
+       GUIDED OVERLAY — 5-step walkthrough
+  ════════════════════════════════════════════════ -->
+  <div class="glitch-overlay" id="glitch-overlay"></div>
+  <div id="guided">
+
+    <!-- GPS dot (rendered inside #main so it's over the map) -->
+    <div id="gps-dot"></div>
+    <div id="gps-accuracy"></div>
+
+    <!-- ⚙ Advanced button — visible during guided flow -->
+    <button id="btn-advanced" class="show">⚙ Advanced</button>
+
+    <!-- ─ STEP 1: Find the site ─────────────────── -->
+    <div class="g-screen active" id="s-welcome">
+      <div class="g-card">
+        <div class="g-logo g-masonic-hero">
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" width="96" height="96">
+            <line x1="32" y1="8"  x2="10" y2="52" stroke="#3ddc84" stroke-width="1.2" opacity=".9"/>
+            <line x1="32" y1="8"  x2="54" y2="52" stroke="#3ddc84" stroke-width="1.2" opacity=".9"/>
+            <polyline points="14,44 14,20 38,20" stroke="#f5c842" stroke-width="1.2" fill="none" opacity=".85"/>
+            <polygon points="32,14 20,46 44,46" stroke="#3ddc84" stroke-width=".8" fill="none" opacity=".6"/>
+            <circle cx="32" cy="32" r="4"  stroke="#3ddc84" stroke-width="1" fill="none" opacity=".9"/>
+            <circle cx="32" cy="32" r="1.5" fill="#3ddc84" opacity="1"/>
+            <circle cx="32" cy="32" r="28" stroke="#3ddc84" stroke-width=".5" fill="none" opacity=".3"/>
+            <path d="M 14,52 A 22,22 0 0 1 50,52" stroke="#f5c842" stroke-width=".7" fill="none" opacity=".6"/>
+            <ellipse cx="32" cy="32" rx="28" ry="9" stroke="#f5c842" stroke-width=".4" fill="none" opacity=".25"/>
+          </svg>
+        </div>
+        <div class="g-title">Plot</div>
+        <div class="g-byline">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50" width="14" height="14" style="vertical-align:middle">
+            <circle cx="25" cy="25" r="6" fill="#f59e0b"/>
+            <ellipse cx="25" cy="25" rx="22" ry="8" fill="none" stroke="#f59e0b" stroke-width="1.5" opacity=".9"/>
+            <ellipse cx="25" cy="25" rx="22" ry="8" fill="none" stroke="#f97316" stroke-width="1.5" opacity=".7" transform="rotate(60 25 25)"/>
+            <ellipse cx="25" cy="25" rx="22" ry="8" fill="none" stroke="#f97316" stroke-width="1.5" opacity=".5" transform="rotate(120 25 25)"/>
+          </svg>
+          <span>by Atom Unhinged</span>
+        </div>
+        <div class="g-sub">Find your job site, scan the lot, walk the lines — get your paint estimate in minutes.</div>
+        <div class="g-searchbar">
+          <input type="text" id="g-input" placeholder="Enter job site address…" autocomplete="off" autocorrect="off" spellcheck="false"/>
+          <button type="button" id="g-search-btn">→</button>
+        </div>
+        <div id="g-results" class="g-results"></div>
+        <div class="g-or">or</div>
+        <button type="button" id="g-locate-btn">📍 Use My Location</button>
+      </div>
+    </div>
+
+    <!-- ─ STEP 2: Center & Confirm ──────────────── -->
+    <div class="g-screen" id="s-scan">
+      <!-- Scanning pill — top, shown while AI works -->
+      <div class="g-scanning-pill" id="scan-pill" style="display:none">
+        <div class="spin"></div>
+        <span id="scan-pill-text">Let me see if I can find it…</span>
+      </div>
+
+      <!-- Floating bottom card -->
+      <div class="g-float" id="scan-float">
+        <div class="g-float-handle"></div>
+        <div class="g-stepdots">
+          <div class="g-dot done"></div>
+          <div class="g-dot active"></div>
+          <div class="g-dot"></div>
+          <div class="g-dot"></div>
+        </div>
+        <div class="g-float-title" id="scan-float-title">Is this your lot?</div>
+        <div class="g-float-sub" id="scan-float-sub">Pinch to zoom · drag to pan until your lot is centered, then confirm.</div>
+        <div class="g-float-actions">
+          <button type="button" class="btn btn-y btn-full" id="g-btn-im-here">✓ Yes — Scan This Lot</button>
+          <div class="g-float-row">
+            <button type="button" class="btn btn-o" id="g-btn-draw">✎ Draw Manually</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Draw mode float -->
+      <div class="g-float" id="draw-float" style="display:none">
+        <div class="g-float-handle"></div>
+        <div class="g-float-title">Trace your lot</div>
+        <div class="g-float-sub" id="draw-float-sub">Tap the map to place corner points. Double-tap the last point to close the shape.</div>
+        <div class="draw-point-counter"><span id="draw-point-count">0</span> points placed</div>
+        <div class="g-float-row">
+          <button type="button" class="btn btn-r btn-full" id="g-btn-draw-cancel">✕ Cancel</button>
+          <button type="button" class="btn btn-y btn-full" id="g-btn-draw-finish" style="display:none">✓ Done</button>
+        </div>
+      </div>
+
+      <!-- After scan — result card replaces float content -->
+      <div class="g-float" id="scan-result-float" style="display:none">
+        <div class="g-float-handle"></div>
+        <div class="g-lot-badge"><div class="g-lot-dot"></div><span id="g-lot-label">Lot 1 of 3</span></div>
+        <div class="g-float-title" id="confirm-lot-name">Lot detected</div>
+        <div class="g-float-meta" id="confirm-lot-meta">—</div>
+        <div class="g-float-sub" id="confirm-lot-sub">I found your lot boundary. Does the green outline look right?</div>
+        <div class="map-rotate-row">
+          <span class="map-rotate-label">Rotate map</span>
+          <button class="map-rot-btn" id="map-rot-ccw">↺</button>
+          <div class="map-rot-deg"><span id="map-rot-val">0</span>°</div>
+          <button class="map-rot-btn" id="map-rot-cw">↻</button>
+          <button class="map-rot-btn map-rot-reset" id="map-rot-reset">⊙</button>
+        </div>
+        <div class="g-float-actions">
+          <button type="button" class="btn btn-y btn-full" id="g-btn-confirm">✓ Yes — Use This Lot</button>
+          <button type="button" class="btn btn-g btn-full" id="g-btn-add-lot" style="display:none">+ Add Another Lot (up to 3)</button>
+          <div class="g-float-row">
+            <button type="button" class="btn btn-o" id="g-btn-rescan">↺ Try Again</button>
+            <button type="button" class="btn btn-o" id="g-btn-draw2">✎ Draw</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─ STEP 2.5: What to Paint ───────────────── -->
+    <!-- ─ STEP 3: What's the job? ───────────────── -->
+    <div class="g-screen" id="s-whatpaint">
+      <div class="g-float">
+        <div class="g-float-handle"></div>
+        <div class="g-stepdots">
+          <div class="g-dot done"></div>
+          <div class="g-dot done"></div>
+          <div class="g-dot active"></div>
+          <div class="g-dot"></div>
+        </div>
+        <div class="g-float-title">What's the job?</div>
+        <div class="g-float-sub">Select everything that applies to this site.</div>
+        <div class="g-job-grid">
+          <div class="g-job-chip checked" data-id="paint"><div class="g-job-chip-icon">🎨</div><div class="g-job-chip-label">Line Painting</div></div>
+          <div class="g-job-chip" data-id="seal"><div class="g-job-chip-icon">🛡</div><div class="g-job-chip-label">Seal Coating</div></div>
+          <div class="g-job-chip" data-id="clean"><div class="g-job-chip-icon">🧹</div><div class="g-job-chip-label">Cleaning</div></div>
+          <div class="g-job-chip" data-id="repair"><div class="g-job-chip-icon">🔧</div><div class="g-job-chip-label">Crack Repair</div></div>
+          <div class="g-job-chip" data-id="measure"><div class="g-job-chip-icon">📐</div><div class="g-job-chip-label">Measure Only</div></div>
+          <div class="g-job-chip" data-id="other"><div class="g-job-chip-icon">📋</div><div class="g-job-chip-label">Other</div></div>
+        </div>
+        <button class="btn btn-y btn-full" id="g-btn-to-trace">Next → Map &amp; Measure</button>
+      </div>
+    </div>
+
+    <!-- ─ STEP 4: Results & Refine ───────────────── -->
+    <div class="g-screen" id="s-results">
+      <div class="g-float">
+        <div class="g-float-handle"></div>
+        <div class="g-stepdots">
+          <div class="g-dot done"></div>
+          <div class="g-dot done"></div>
+          <div class="g-dot done"></div>
+          <div class="g-dot active"></div>
+        </div>
+        <div class="g-float-title" id="g-results-title">Your Lot</div>
+        <div class="g-float-sub" id="g-results-sub">Here's what I measured. You can refine the outline or walk the lot for precision.</div>
+        <div class="g-results-grid">
+          <div class="g-result-box"><div class="g-result-val" id="g-r-sqft">—</div><div class="g-result-lbl">SQ FT</div></div>
+          <div class="g-result-box"><div class="g-result-val" id="g-r-perim">—</div><div class="g-result-lbl">PERIMETER FT</div></div>
+          <div class="g-result-box"><div class="g-result-val" id="g-r-acres">—</div><div class="g-result-lbl">ACRES</div></div>
+          <div class="g-result-box"><div class="g-result-val" id="g-r-stalls">—</div><div class="g-result-lbl">EST. STALLS</div></div>
+        </div>
+        <div id="g-lot-list" style="display:flex;flex-direction:column;gap:6px;margin-top:2px"></div>
+        <div class="g-float-actions">
+          <button class="btn btn-y btn-full" id="g-btn-layout-stalls">→ Layout Stalls</button>
+          <div class="g-float-row">
+            <button class="btn btn-o" id="g-btn-get-estimate">📋 Skip to Estimate</button>
+            <button class="btn btn-o" id="g-btn-refine-tools">✏️ Refine</button>
+          </div>
+          <button class="btn btn-o btn-full" id="g-btn-walk" style="font-size:10px">🚶 Walk Lot for Precision GPS</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─ PHASE 2: Stall Layout ──────────────────── -->
+    <div class="g-screen" id="s-stalls-layout">
+
+      <!-- Stall size first-time prompt -->
+      <div class="g-float" id="stall-size-prompt" style="display:none">
+        <div class="g-float-handle"></div>
+        <div class="g-float-title">Stall Size</div>
+        <div class="g-float-sub">A standard parking stall is <strong>9 ft wide × 18 ft deep</strong> — the North American default. Change it here if your job requires something different (compact, accessible, angled).</div>
+        <div class="stall-size-row">
+          <div class="stall-size-field">
+            <label>Width (ft)</label>
+            <div class="stall-size-btns">
+              <button class="stall-sz-btn" data-w="8">8</button>
+              <button class="stall-sz-btn active" data-w="9">9</button>
+              <button class="stall-sz-btn" data-w="10">10</button>
+              <button class="stall-sz-btn" data-w="12">12</button>
+            </div>
+          </div>
+          <div class="stall-size-field">
+            <label>Depth (ft)</label>
+            <div class="stall-size-btns">
+              <button class="stall-sz-btn" data-d="16">16</button>
+              <button class="stall-sz-btn active" data-d="18">18</button>
+              <button class="stall-sz-btn" data-d="20">20</button>
+              <button class="stall-sz-btn" data-d="22">22</button>
+            </div>
+          </div>
+        </div>
+        <div class="stall-size-preview">
+          <div class="ssp-box" id="ssp-box"></div>
+          <div class="ssp-label" id="ssp-label">9 × 18 ft  ·  162 sq ft per stall</div>
+        </div>
+        <button class="btn btn-y btn-full" id="stall-size-confirm">✓ Got it — Generate Grid</button>
+      </div>
+
+      <!-- Stall controls — floating bottom -->
+      <div class="g-float" id="stall-controls-float" style="display:none">
+        <div class="g-float-handle"></div>
+        <div class="stall-ctrl-row">
+          <div class="stall-ctrl-group">
+            <label>Stalls</label>
+            <div class="stall-num-wrap">
+              <button class="stall-num-btn" id="stall-dec">−</button>
+              <input type="number" id="stall-count-input" value="20" min="1" max="999"/>
+              <button class="stall-num-btn" id="stall-inc">+</button>
+            </div>
+          </div>
+          <div class="stall-ctrl-group">
+            <label>Size</label>
+            <div class="stall-size-display" id="stall-size-display">9×18</div>
+          </div>
+          <div class="stall-ctrl-group">
+            <label>Snap</label>
+            <button class="stall-snap-toggle active" id="stall-snap-btn">🧲 On</button>
+          </div>
+        </div>
+        <div class="stall-live-stats">
+          <span id="stall-live-count">0 active stalls</span>
+          <span>·</span>
+          <span id="stall-live-ft">0 linear ft</span>
+          <span>·</span>
+          <span id="stall-live-sqft">0 sq ft</span>
+        </div>
+        <div class="g-float-row" style="margin-top:4px">
+          <button class="btn btn-o" id="stall-rotate-cw">↻ Rotate</button>
+          <button class="btn btn-o" id="stall-recenter">⊙ Recenter</button>
+          <button class="btn btn-o" id="stall-size-change">⚙ Size</button>
+        </div>
+        <button class="btn btn-y btn-full" id="stall-confirm-btn">✓ Confirm Layout →</button>
+      </div>
+
+      <!-- Scanning pill reused for grid generation -->
+      <div class="g-scanning-pill green-radar" id="stall-gen-pill" style="display:none">
+        <div class="spin"></div>
+        <span id="stall-gen-text">Generating stall grid…</span>
+      </div>
+    </div>
+
+    <!-- ─ STEP 3: Walk & Trace ──────────────────── -->
+    <div class="g-screen" id="s-trace">
+      <div class="g-top">
+        <div class="g-step-pill" style="margin-bottom:4px">
+          <span class="g-step-num">Step 3 of 5</span>
+          <span class="g-step-label">Walk &amp; Trace</span>
+        </div>
+        <div class="type-pill">
+          <div class="type-dot" id="g-type-dot"></div>
+          <div class="type-name" id="g-type-name">—</div>
+          <div class="type-w" id="g-type-w"></div>
+        </div>
+        <div class="trace-hint" id="g-trace-hint">Walk the line · GPS traces your path automatically</div>
+        <div class="trace-prog" id="g-trace-prog"></div>
+      </div>
+      <div class="g-bottom">
+        <div class="trace-stats">
+          <div class="ts-item">
+            <div class="ts-val" id="g-ts-segs">0</div>
+            <div class="ts-lbl">Segments</div>
+          </div>
+          <div class="ts-item">
+            <div class="ts-val" id="g-ts-ft">0</div>
+            <div class="ts-lbl">Lin Ft</div>
+          </div>
+          <div class="ts-item">
+            <div class="ts-val" id="g-ts-type">1/1</div>
+            <div class="ts-lbl">Type</div>
+          </div>
+        </div>
+        <div class="trace-btns">
+          <button class="btn btn-o btn-sm" id="g-btn-pause" style="flex:0 0 auto">⏸ Pause</button>
+          <button class="btn btn-o btn-sm" id="g-btn-finish-line" style="flex:0 0 auto">✓ Done line</button>
+          <button class="btn btn-y btn-full" id="g-btn-next-type">Next type →</button>
+        </div>
+        <button class="btn btn-r btn-sm" id="g-btn-undo" style="width:100%;max-width:380px;font-size:10px">✕ Undo last segment</button>
+      </div>
+    </div>
+
+    <!-- ─ STEP 4: Estimate ──────────────────────── -->
+    <div class="g-screen" id="s-estimate">
+      <div class="est-card">
+        <div class="est-title">Paint Estimate</div>
+        <div class="est-hero">
+          <div class="est-num">
+            <div class="ev" id="g-est-gal">—</div>
+            <div class="eu">Gallons</div>
+          </div>
+          <div class="est-num">
+            <div class="ev" id="g-est-ft" style="font-size:22px">—</div>
+            <div class="eu">Linear Ft</div>
+          </div>
+        </div>
+        <div class="est-bkd" id="g-est-bkd"></div>
+        <div class="labour-wrap">
+          <div class="labour-row">
+            <label>Labour rate ($/hr)</label>
+            <input type="number" id="g-labour-rate" value="65" min="0" step="5"/>
+          </div>
+          <div class="labour-row">
+            <label>Estimated hours</label>
+            <input type="number" id="g-labour-hrs" value="8" min="0" step="0.5"/>
+          </div>
+        </div>
+        <div class="est-total-box">
+          <div class="etv" id="g-est-total">—</div>
+          <div class="etl">Total Estimated Cost (paint + labour)</div>
+        </div>
+        <div class="est-btns">
+          <button class="btn btn-y btn-full" id="g-btn-export">⬆ Export Quote</button>
+          <button class="btn btn-o btn-full" id="g-btn-advanced">⚙ Open in Advanced</button>
+          <button class="btn btn-r btn-full btn-sm" id="g-btn-restart">↺ New Job</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /guided -->
+
+</div><!-- /main -->
+
+<!-- Bottom credit -->
+<div id="by-line">
+  <span style="color:var(--text-dim);font-size:9px;letter-spacing:1px;text-transform:uppercase;font-family:var(--fb)">by</span>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" width="90" height="26">
+    <defs>
+      <linearGradient id="orbitGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#f59e0b"/>
+        <stop offset="100%" style="stop-color:#f97316"/>
+      </linearGradient>
+      <linearGradient id="coreGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#fbbf24"/>
+        <stop offset="100%" style="stop-color:#f59e0b"/>
+      </linearGradient>
+    </defs>
+    <g transform="translate(40,40) rotate(15)">
+      <ellipse cx="0" cy="0" rx="28" ry="10" fill="none" stroke="url(#orbitGrad2)" stroke-width="1.8" opacity="0.9"/>
+      <ellipse cx="0" cy="0" rx="28" ry="10" fill="none" stroke="url(#orbitGrad2)" stroke-width="1.8" opacity="0.7" transform="rotate(60)"/>
+      <ellipse cx="0" cy="0" rx="28" ry="10" fill="none" stroke="url(#orbitGrad2)" stroke-width="1.8" opacity="0.5" transform="rotate(120)"/>
+      <circle cx="0" cy="0" r="5.5" fill="url(#coreGrad2)"/>
+      <circle cx="0" cy="-28" r="2.5" fill="#fbbf24"/>
+      <circle cx="22" cy="16" r="2" fill="#f59e0b" opacity="0.8"/>
+      <circle cx="-24" cy="12" r="1.5" fill="#f97316" opacity="0.7"/>
+      <circle cx="32" cy="-18" r="1.5" fill="#ef4444" opacity="0.9"/>
+    </g>
+    <text x="86" y="36" font-family="'Barlow Condensed','Arial Narrow',sans-serif" font-size="30" font-weight="900" letter-spacing="3" fill="#f59e0b">ATOM</text>
+    <text x="88" y="58" font-family="'Barlow Condensed','Arial Narrow',sans-serif" font-size="16" font-weight="300" letter-spacing="8" fill="#b8d0e8" opacity="0.8">UNHINGED</text>
+    <line x1="86" y1="41" x2="258" y2="41" stroke="#f59e0b" stroke-width="0.6" opacity="0.25"/>
+  </svg>
+</div>
+
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════
+     SCRIPTS
+══════════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   Plot — Stage 1+2  (Touch + Scan Edition)
+   ═══════════════════════════════════════════════════════════════
+
+   SCAN SYSTEM
+   ───────────
+   • Long-press (400ms) anywhere on map → scan mode activates
+   • Animated radar ring pulses from touch point on canvas overlay
+   • Overpass API fetches parking features in expanding bbox
+   • Best-fit polygon drawn with glow animation + instant recalc
+   • Dragging during hold expands the scan radius dynamically
+
+   GESTURES (Hammer.js)
+   ─────────────────────
+   • press       → start long-press scan timer
+   • pressup     → cancel if released early
+   • tap         → single detect (if detect mode active)
+   • pan         → expand scan radius when scanning
+   • pinch       → passed through to Leaflet zoom
+
+   DATA MODEL
+   ──────────
+   shapes[]    { id,type,label,color,areaM2,perimM,layer }
+   stallRows[] { id,label,color,angle,count,stallW,stallD,
+                 rowRotation,aisleWidth,lineFt,
+                 centerLat,centerLng, group }
+   ═══════════════════════════════════════════════════════════════ */
+
+// ── CONSTANTS ────────────────────────────────────────────────
+const M2_SQFT  = 10.7639;
+const M_FT     = 3.28084;
+const FT_M     = 0.3048;
+const M2_ACRES = 0.000247105;
+const PALETTE  = ['#f5c842','#e87f3a','#4ade80','#60a5fa','#f472b6','#a78bfa','#fb923c','#34d399'];
+// ── STATE ─────────────────────────────────────────────────────
+let shapes     = [];
+let stallRows  = [];
+let _shapeId   = 0, _stallId = 0, _colorIdx = 0;
+let _mode      = 'idle'; // 'idle'|'detect'|'stalls'
+let _angle     = 90;
+let _sat = true;  // default satellite
+
+
+// ── MAP ───────────────────────────────────────────────────────
+const map = L.map('map', {
+  center: [46.5136, -84.3358], zoom: 14,
+  zoomControl: false,  tap: false // we handle touch ourselves via Hammer
+});
+
+
+const tileOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  { attribution:'© <a href="https://openstreetmap.org">OSM</a>', maxZoom:21 });
+const tileSat = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { attribution:'© Esri', maxZoom:21 });
+tileOSM.addTo(map); // loaded but not shown — satellite is default
+
+const editGroup = new L.FeatureGroup().addTo(map);
+const drawnItems = new L.FeatureGroup().addTo(map);
+const stallLayer = new L.FeatureGroup().addTo(map);
+const linesLayer = new L.FeatureGroup().addTo(map);
+
+const drawControl = new L.Control.Draw({
+  edit: { featureGroup: drawnItems },
+  draw: {
+    polygon:  { allowIntersection:false, shapeOptions:{ color:'#f5c842', weight:2, fillOpacity:.13 } },
+    polyline: { shapeOptions:{ color:'#e87f3a', weight:3 } },
+    rectangle:false, circle:false, marker:false, circlemarker:false
+  }
+});
+map.addControl(drawControl);
+
+// Switch to satellite immediately on load
+map.removeLayer(tileOSM);
+tileSat.addTo(map);
+
+// ── TILE TOGGLE (two-button centered control) ─────────────────
+document.getElementById('tile-btn').addEventListener('click', function(){
+  map.removeLayer(tileOSM); tileSat.addTo(map);
+  this.classList.add('on');
+  document.getElementById('tile-btn-osm').classList.remove('on');
+});
+document.getElementById('tile-btn-osm').addEventListener('click', function(){
+  map.removeLayer(tileSat); tileOSM.addTo(map);
+  this.classList.add('on');
+  document.getElementById('tile-btn').classList.remove('on');
+});
+
+// ══════════════════════════════════════════════════════════════
+//  HAMMER.JS GESTURE HANDLING
+// ══════════════════════════════════════════════════════════════
+const mapContainer = document.getElementById('map');
+const hammer = new Hammer.Manager(mapContainer, {
+  recognizers:[
+    [Hammer.Pan,     { direction: Hammer.DIRECTION_ALL, threshold: 3 }],
+    [Hammer.Tap,     { taps:1 }],
+    [Hammer.Pinch,   { enable:true }],
+    [Hammer.Rotate,  { enable:true }],
+  ]
+});
+
+// Helper: convert event point to canvas coords relative to map container
+function eventToCanvas(ev){
+  const rect = mapContainer.getBoundingClientRect();
+  const src  = ev.pointers ? ev.pointers[0] : ev;
+  return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+}
+
+// Helper: canvas px → Leaflet LatLng
+function canvasPtToLatLng(pt){
+  return map.containerPointToLatLng(L.point(pt.x, pt.y));
+}
+
+// ── Shape selection & rotation ────────────────────────────────
+let _selectedShape  = null; // shapes[] entry currently selected
+let _rotateStartAng = 0;    // hammer rotation angle at gesture start
+let _rotateOrigLLs  = null; // original latlngs before rotation started
+let _isRotating     = false;
+
+// Tap a drawn polygon to select it for rotation
+map.on('click', e => {
+  // Check if tap lands inside any shape
+  if(_mode === 'detect'){
+    _mode = 'idle';
+    showHUD('Detecting…', true);
+    detectLotAt(e.latlng, 0.0003);
+    setDetectBtnIdle();
+    return;
+  }
+  if(_mode === 'stalls'){ placeStallRow(e.latlng); return; }
+
+  // Hit-test shapes — no-op now, selection handled by rotate gesture
+});
+
+function selectShape(s){
+  deselectShape();
+  _selectedShape = s;
+  s.layer.setStyle({ dashArray:'8 4', weight:3, opacity:1 });
+}
+
+function deselectShape(){
+  if(_selectedShape){
+    _selectedShape.layer.setStyle({ dashArray:null, weight:2.5, opacity:0.9 });
+    _selectedShape = null;
+  }
+  _isRotating = false;
+}
+
+// Rotate a polygon's latlngs around its centroid by `deg` degrees
+function rotatePolygon(layer, deg){
+  const gj       = layer.toGeoJSON();
+  const centroid = turf.centroid(gj);
+  const rotated  = turf.transformRotate(gj, deg, { pivot: centroid });
+  const newLLs   = rotated.geometry.coordinates[0].map(c => L.latLng(c[1], c[0]));
+  layer.setLatLngs(newLLs);
+}
+
+// ── Two-finger rotate — no pre-selection needed ───────────────
+hammer.on('rotatestart', ev => {
+  // Find shape under gesture center, or fall back to last shape
+  const pt     = eventToCanvas(ev);
+  const latlng = canvasPtToLatLng(pt);
+  const turfPt = turf.point([latlng.lng, latlng.lat]);
+  let hit = null;
+  for(let i = shapes.length-1; i >= 0; i--){
+    const s = shapes[i];
+    if(s.type !== 'polygon') continue;
+    try{ if(turf.booleanPointInPolygon(turfPt, s.layer.toGeoJSON())){ hit = s; break; } }catch(e){}
+  }
+  if(!hit && shapes.length) hit = shapes[shapes.length-1]; // fallback: last shape
+  if(!hit) return;
+  _selectedShape  = hit;
+  _isRotating     = true;
+  _rotateStartAng = ev.rotation;
+  hit.layer.setStyle({ dashArray:'8 4', weight:3 });
+  map.dragging.disable();
+  map.touchZoom.disable();
+});
+
+hammer.on('rotatemove', ev => {
+  if(!_isRotating || !_selectedShape) return;
+  const delta = ev.rotation - _rotateStartAng;
+  _rotateStartAng = ev.rotation;
+  rotatePolygon(_selectedShape.layer, delta);
+});
+
+hammer.on('rotateend rotatecancel', ev => {
+  if(!_isRotating) return;
+  _isRotating = false;
+  map.dragging.enable();
+  map.touchZoom.enable();
+  if(_selectedShape){
+    _selectedShape.layer.setStyle({ dashArray:null, weight:2.5 });
+    const { areaM2, perimM } = shapeMetrics(_selectedShape.layer, 'polygon');
+    _selectedShape.areaM2 = areaM2;
+    _selectedShape.perimM = perimM;
+    updateResults(); autoSave();
+    _selectedShape = null;
+  }
+});
+
+// ── Tap → single detect if detect mode active ────────────────
+hammer.on('tap', ev => {
+  if(_mode === 'detect'){
+    _mode = 'idle';
+    const pt     = eventToCanvas(ev);
+    const latlng = canvasPtToLatLng(pt);
+    showHUD('Detecting…', true);
+    detectLotAt(latlng, 0.0003);
+    setDetectBtnIdle();
+    return;
+  }
+  if(_mode === 'stalls'){
+    const pt     = eventToCanvas(ev);
+    const latlng = canvasPtToLatLng(pt);
+    placeStallRow(latlng);
+  }
+});
+
+
+// Escape cancels everything
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') cancelAllModes();
+});
+
+function cancelAllModes(){
+  _mode = 'idle';
+  setDetectBtnIdle();
+  setModeBanner(false);
+  document.getElementById('place-btn').style.display      = '';
+  document.getElementById('cancel-place-btn').style.display = 'none';
+  // Stop line drawing if active
+  if(_lineDrawHandler){ _lineDrawHandler.disable(); _lineDrawHandler=null; }
+  if(document.getElementById('lt-draw-btn'))  document.getElementById('lt-draw-btn').style.display='';
+  if(document.getElementById('lt-stop-btn'))  document.getElementById('lt-stop-btn').style.display='none';
+  hideHUD();
+  map.getContainer().classList.remove('mode-detect','mode-stalls');
+  deselectShape();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  HUD helpers
+// ══════════════════════════════════════════════════════════════
+function showHUD(text, spinner=false){
+  const hud = document.getElementById('scan-hud');
+  document.getElementById('scan-hud-text').innerHTML =
+    (spinner ? '<span class="spin"></span> ' : '') + text;
+  hud.classList.add('show');
+}
+function hideHUD(){
+  document.getElementById('scan-hud').classList.remove('show');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  OSM DETECTION
+// ══════════════════════════════════════════════════════════════
+async function queryOverpass(q){
+  const r = await fetch('https://overpass-api.de/api/interpreter',
+    { method:'POST', body:'data='+encodeURIComponent(q) });
+  return r.json();
+}
+
+async function detectLotAt(latlng, radiusDeg){
+  const R  = Math.max(0.0002, radiusDeg || 0.0003);
+  const b  = `${latlng.lat-R},${latlng.lng-R},${latlng.lat+R},${latlng.lng+R}`;
+  const q  = `[out:json][timeout:14];(way["amenity"="parking"](${b});way["landuse"="parking"](${b});way["parking"="surface"](${b}););out geom;`;
+
+  try{
+    let data = await queryOverpass(q);
+
+    // Auto-widen if nothing found
+    if(!data.elements?.length){
+      const R2 = R * 3;
+      const b2 = `${latlng.lat-R2},${latlng.lng-R2},${latlng.lat+R2},${latlng.lng+R2}`;
+      const q2 = `[out:json][timeout:14];(way["amenity"="parking"](${b2});way["landuse"="parking"](${b2}););out geom;`;
+      data = await queryOverpass(q2);
+    }
+
+    hideHUD();
+
+    if(!data.elements?.length){
+      showScanResult('⚠️ No parking data found here in OSM.\nTry the manual polygon tool or move closer to the lot surface.', 'warn', 0);
+      return;
+    }
+
+    applyOSMLots(data.elements, latlng);
+
+  }catch(err){
+    hideHUD();
+    showScanResult('❌ Query failed — check internet connection.', 'warn', 0);
+    console.error(err);
+  }
+}
+
+function applyOSMLots(elements, clickLL){
+  // Find closest element centroid to click
+  let best=null, bestD=Infinity;
+  elements.forEach(el=>{
+    if(!el.geometry?.length) return;
+    const cLat = el.geometry.reduce((a,n)=>a+n.lat,0)/el.geometry.length;
+    const cLng = el.geometry.reduce((a,n)=>a+n.lon,0)/el.geometry.length;
+    const d = Math.hypot(cLat-clickLL.lat, cLng-clickLL.lng);
+    if(d<bestD){ bestD=d; best=el; }
+  });
+  if(!best?.geometry?.length){
+    showScanResult('⚠️ Could not parse boundary. Draw manually.','warn',0);
+    return;
+  }
+
+  const lls   = best.geometry.map(n=>L.latLng(n.lat,n.lon));
+  const color = PALETTE[_colorIdx++%PALETTE.length];
+
+  // Create polygon with glow class
+  const layer = L.polygon(lls,{
+    color, fillColor:color, weight:2.5,
+    fillOpacity:.15,
+    className:'detected-lot'
+  });
+  drawnItems.addLayer(layer);
+  map.fitBounds(layer.getBounds(),{ padding:[44,44], animate:true, duration:.5 });
+
+  const {areaM2,perimM} = shapeMetrics(layer,'polygon');
+  shapes.push({ id:_shapeId++, type:'polygon',
+    label:`OSM Lot ${shapes.length+1}`, color, areaM2, perimM, layer });
+
+  refreshShapeList(); updateResults(); autoSave();
+
+  // Summary info
+  const sqft  = Math.round(areaM2*M2_SQFT).toLocaleString('en-CA');
+  const name  = best.tags?.name || best.tags?.['addr:street'] || 'Unnamed lot';
+  const total = elements.length;
+
+  showScanResult(
+    `✅  "${name}"\n${sqft} sq ft  ·  ${total} lot(s) in scan zone\nUse the edit tool to adjust the outline.`,
+    'ok', total
+  );
+  showToast(`Detected — ${sqft} sq ft`);
+  showTab('tab-lot');
+}
+
+// ── Scan result card ─────────────────────────────────────────
+function showScanResult(text, state, lotCount){
+  const wrap = document.getElementById('scan-result-wrap');
+  const icon = state==='ok' ? '🛰' : '⚠️';
+  const col  = state==='ok' ? 'var(--green)' : 'var(--accent2)';
+  wrap.innerHTML = `
+    <div class="scan-result-card">
+      <div class="sr-title" style="color:${col}">${icon} Scan Result ${lotCount>1?'· '+lotCount+' found':''}</div>
+      <div class="sr-body">${text}</div>
+    </div>`;
+}
+
+// ── Detect button ─────────────────────────────────────────────
+document.getElementById('detect-btn').addEventListener('click', function(){
+  if(_mode==='detect'){ cancelAllModes(); return; }
+  cancelAllModes();
+  _mode = 'detect';
+  map.getContainer().classList.add('mode-detect');
+  this.classList.add('on');
+  this.textContent = '✕ Cancel';
+  showHUD('Tap any parking lot on the map');
+  showTab('tab-lot');
+});
+function setDetectBtnIdle(){
+  const btn = document.getElementById('detect-btn');
+  btn.classList.remove('on','scanning');
+  btn.textContent = '🅿 Scan Lot';
+  map.getContainer().classList.remove('mode-detect');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  STALL GEOMETRY + PLACEMENT
+// ══════════════════════════════════════════════════════════════
+function offsetLL(ll,dx,dy){
+  return L.latLng(
+    ll.lat + dy/111320,
+    ll.lng + dx/(111320*Math.cos(ll.lat*Math.PI/180))
+  );
+}
+function rotateOffset(ll,center,rot){
+  const ax=ll.lng-center.lng, ay=ll.lat-center.lat;
+  return L.latLng(center.lat+ax*Math.sin(rot)+ay*Math.cos(rot),
+                  center.lng+ax*Math.cos(rot)-ay*Math.sin(rot));
+}
+function buildStallGroup(center,angle,count,wFt,dFt,rowRotDeg){
+  const wM=wFt*FT_M, dM=dFt*FT_M;
+  const rot=(angle+rowRotDeg)*Math.PI/180;
+  const totalW=count*wM;
+  const group=L.featureGroup();
+  for(let i=0;i<count;i++){
+    const cx=-totalW/2+i*wM+wM/2;
+    const raw=[
+      offsetLL(center,cx-wM/2,0), offsetLL(center,cx+wM/2,0),
+      offsetLL(center,cx+wM/2,dM),offsetLL(center,cx-wM/2,dM),
+    ].map(ll=>rotateOffset(ll,center,rot));
+    L.polygon(raw,{weight:1.5,fillOpacity:.08,interactive:false}).addTo(group);
+  }
+  const fL=rotateOffset(offsetLL(center,-totalW/2,0),center,rot);
+  const fR=rotateOffset(offsetLL(center, totalW/2,0),center,rot);
+  L.polyline([fL,fR],{weight:2.5,interactive:false}).addTo(group);
+  return group;
+}
+function stallLineFt(count,wFt,dFt){ return (count+1)*dFt + count*wFt; }
+
+function placeStallRow(latlng){
+  const count  = parseInt(document.getElementById('stalls-per-row').value)||8;
+  const wFt    = parseFloat(document.getElementById('stall-w').value)||9;
+  const dFt    = parseFloat(document.getElementById('stall-d').value)||18;
+  const rowRot = parseFloat(document.getElementById('row-rotation').value)||0;
+  const aisle  = parseFloat(document.getElementById('aisle-width').value)||24;
+  const label  = document.getElementById('row-label').value.trim()||`Row ${stallRows.length+1}`;
+  const color  = PALETTE[_stallId%PALETTE.length];
+
+  const group = buildStallGroup(latlng,_angle,count,wFt,dFt,rowRot);
+  group.setStyle({color,fillColor:color});
+  stallLayer.addLayer(group);
+
+  const lFt = stallLineFt(count,wFt,dFt);
+  stallRows.push({
+    id:_stallId++, label, color, angle:_angle,
+    count, stallW:wFt, stallD:dFt, rowRotation:rowRot, aisleWidth:aisle,
+    centerLat:latlng.lat, centerLng:latlng.lng,
+    lineFt:lFt, group
+  });
+  refreshStallList(); updateResults(); autoSave();
+  showToast(`"${label}" — ${count} stalls`);
+}
+
+// Stall mode buttons
+document.getElementById('place-btn').addEventListener('click',()=>{
+  cancelAllModes();
+  _mode='stalls';
+  map.getContainer().classList.add('mode-stalls');
+  setModeBanner(true);
+  document.getElementById('place-btn').style.display='none';
+  document.getElementById('cancel-place-btn').style.display='';
+});
+document.getElementById('cancel-place-btn').addEventListener('click',()=>cancelAllModes());
+document.getElementById('clear-stalls-btn').addEventListener('click',()=>{
+  if(!stallRows.length)return;
+  if(!confirm('Clear all stall rows?'))return;
+  stallRows.forEach(r=>stallLayer.removeLayer(r.group));
+  stallRows=[];_stallId=0;
+  refreshStallList();updateResults();autoSave();
+  showToast('Stall rows cleared');
+});
+
+function setModeBanner(on){
+  document.getElementById('place-banner').style.display = on ? 'block' : 'none';
+}
+
+// Angle picker
+document.querySelectorAll('.ang-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.ang-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    _angle=parseInt(btn.dataset.angle);
+  });
+});
+
+// Live stall preview
+function updateStallPreview(){
+  const w=parseFloat(document.getElementById('stall-w').value)||9;
+  const d=parseFloat(document.getElementById('stall-d').value)||18;
+  const n=parseInt(document.getElementById('stalls-per-row').value)||8;
+  const lFt=stallLineFt(n,w,d);
+  set('stall-dim',`${w}×${d} ft`);
+  set('stall-area-ft',`${(w*d).toFixed(0)} ft²`);
+  set('stall-row-info',`${n} stalls / ${Math.round(lFt)} ln ft`);
+}
+['stall-w','stall-d','stalls-per-row'].forEach(id=>
+  document.getElementById(id).addEventListener('input',updateStallPreview));
+updateStallPreview();
+
+// ══════════════════════════════════════════════════════════════
+//  DRAW EVENTS
+// ══════════════════════════════════════════════════════════════
+map.on(L.Draw.Event.CREATED,e=>{
+  if(_mode === 'lines') return; // handled by Stage 3 handler below
+  const layer=e.layer, type=e.layerType;
+  const color=PALETTE[_colorIdx++%PALETTE.length];
+  if(layer.setStyle) layer.setStyle({color,fillColor:color});
+  drawnItems.addLayer(layer);
+  const {areaM2,perimM}=shapeMetrics(layer,type);
+  const lbl={polygon:'Lot',polyline:'Line'}[type]||'Shape';
+  shapes.push({id:_shapeId++,type,label:`${lbl} ${shapes.length+1}`,color,areaM2,perimM,layer});
+  refreshShapeList();updateResults();autoSave();
+  showToast(`${lbl} added`);
+});
+map.on(L.Draw.Event.EDITED,e=>{
+  e.layers.eachLayer(l=>{
+    const s=shapes.find(x=>x.layer===l);
+    if(s){const m=shapeMetrics(l,s.type);s.areaM2=m.areaM2;s.perimM=m.perimM;}
+  });
+  refreshShapeList();updateResults();autoSave();
+});
+map.on(L.Draw.Event.DELETED,e=>{
+  e.layers.eachLayer(l=>{const i=shapes.findIndex(x=>x.layer===l);if(i!==-1)shapes.splice(i,1);});
+  refreshShapeList();updateResults();autoSave();
+});
+
+// ══════════════════════════════════════════════════════════════
+//  SHAPE METRICS
+// ══════════════════════════════════════════════════════════════
+function shapeMetrics(layer,type){
+  let areaM2=0,perimM=0;
+  try{
+    const gj=layer.toGeoJSON();
+    if(type!=='polyline'){areaM2=turf.area(gj);perimM=turf.length(gj,{units:'meters'});}
+    else perimM=turf.length(gj,{units:'meters'});
+  }catch(e){console.warn('Turf',e);}
+  return{areaM2,perimM};
+}
+
+// ══════════════════════════════════════════════════════════════
+//  PAINT ENGINE  (reusable for Stage 3/4)
+// ══════════════════════════════════════════════════════════════
+function calcPaint(linearFt,widthIn,coverage,wastePct,coats){
+  const wFt=widthIn/12;
+  const area=linearFt*wFt;
+  const raw=area/coverage;
+  return{paintAreaSqFt:area, rawGallons:raw, totalGallons:raw*(1+wastePct/100)*coats};
+}
+
+document.getElementById('paint-type').addEventListener('change',function(){
+  const cov=this.options[this.selectedIndex].dataset.cov;
+  if(cov) document.getElementById('coverage-rate').value=cov;
+  updateResults();
+});
+
+// ══════════════════════════════════════════════════════════════
+//  STAGE 3 — LINE PLANNING
+//  Line types, drawable + editable polylines, per-type footage
+// ══════════════════════════════════════════════════════════════
+
+// Line type definitions — id, label, default width (in), color, icon
+const LINE_TYPES = [
+  { id:'divider',    name:'Stall Divider',  widthIn:4,  color:'#f5c842', icon:'⬦' },
+  { id:'front',      name:'Front Stripe',   widthIn:4,  color:'#e87f3a', icon:'▬' },
+  { id:'stopbar',    name:'Stop Bar',       widthIn:12, color:'#f87171', icon:'█' },
+  { id:'crosswalk',  name:'Crosswalk',      widthIn:6,  color:'#a78bfa', icon:'≡' },
+  { id:'curb',       name:'Curb Line',      widthIn:6,  color:'#60a5fa', icon:'⌒' },
+  { id:'arrow',      name:'Arrow',          widthIn:24, color:'#34d399', icon:'↑' },
+  { id:'doubleyel',  name:'Double Yellow',  widthIn:4,  color:'#fde68a', icon:'⬌' },
+  { id:'custom',     name:'Custom',         widthIn:4,  color:'#c8ccde', icon:'✎' },
+];
+
+// Drawn lines state
+// { id, typeId, label, widthIn, lengthFt, color, layer }
+let paintLines  = [];
+let _lineId     = 0;
+let _activeType = LINE_TYPES[0];
+
+// ── Build line type grid ──────────────────────────────────────
+function buildLtGrid(){
+  const grid = document.getElementById('lt-grid');
+  grid.innerHTML = '';
+  LINE_TYPES.forEach(t=>{
+    const btn = document.createElement('button');
+    btn.className = 'lt-btn' + (t.id===_activeType.id?' active':'');
+    btn.dataset.id = t.id;
+    btn.innerHTML = `
+      <span class="lt-icon">${t.icon}</span>
+      <span class="lt-name">${t.name}</span>
+      <span class="lt-w">${t.widthIn}"</span>
+      <div class="lt-stripe" style="background:${t.color}"></div>`;
+    btn.addEventListener('click',()=>selectLineType(t));
+    grid.appendChild(btn);
+  });
+}
+
+function selectLineType(t){
+  _activeType = t;
+  document.querySelectorAll('.lt-btn').forEach(b=>b.classList.toggle('active',b.dataset.id===t.id));
+  document.getElementById('lt-width').value = t.widthIn;
+  set('lt-active-name', t.name);
+  set('lt-active-width', t.widthIn+'"');
+}
+
+document.getElementById('lt-width').addEventListener('input', function(){
+  _activeType = {..._activeType, widthIn: parseFloat(this.value)||4 };
+  set('lt-active-width', this.value+'"');
+});
+
+buildLtGrid();
+
+// ── Draw mode for lines ───────────────────────────────────────
+let _lineDrawHandler = null;
+
+function startLineDrawing(){
+  cancelAllModes();
+  _mode = 'lines';
+
+  // Use Leaflet.draw polyline handler directly
+  _lineDrawHandler = new L.Draw.Polyline(map, {
+    shapeOptions:{ color: _activeType.color, weight: Math.max(2, _activeType.widthIn/3), opacity:0.9 },
+    showLength: true,
+    metric: false,
+    feet: true,
+  });
+  _lineDrawHandler.enable();
+
+  document.getElementById('lt-draw-btn').style.display = 'none';
+  document.getElementById('lt-stop-btn').style.display = '';
+  showHUD(`Drawing ${_activeType.name} — double-click to finish`);
+}
+
+function stopLineDrawing(){
+  if(_lineDrawHandler){ _lineDrawHandler.disable(); _lineDrawHandler=null; }
+  _mode = 'idle';
+  document.getElementById('lt-draw-btn').style.display = '';
+  document.getElementById('lt-stop-btn').style.display = 'none';
+  hideHUD();
+}
+
+document.getElementById('lt-draw-btn').addEventListener('click', startLineDrawing);
+document.getElementById('lt-stop-btn').addEventListener('click', stopLineDrawing);
+document.getElementById('lt-clear-btn').addEventListener('click',()=>{
+  if(!paintLines.length) return;
+  if(!confirm('Clear all traced lines?')) return;
+  linesLayer.clearLayers();
+  paintLines = []; _lineId = 0;
+  refreshLineList(); updateResults(); autoSave();
+  showToast('Lines cleared');
+});
+
+// ── Intercept Leaflet.draw CREATED for lines mode ────────────
+// We patch the existing draw event to also handle line type
+const _origDrawCreated = map._events[L.Draw.Event.CREATED];
+map.on(L.Draw.Event.CREATED, e=>{
+  if(_mode !== 'lines') return; // handled by existing event for lot shapes
+  const layer = e.layer;
+  if(e.layerType !== 'polyline') return;
+
+  const widthIn  = parseFloat(document.getElementById('lt-width').value)||_activeType.widthIn;
+  const userLabel= document.getElementById('lt-label').value.trim();
+  const label    = userLabel || `${_activeType.name} ${paintLines.length+1}`;
+  const color    = _activeType.color;
+  const lengthM  = turf.length(layer.toGeoJSON(),{units:'meters'});
+  const lengthFt = lengthM * M_FT;
+
+  // Style the line visually — thicker = wider paint
+  layer.setStyle({
+    color, weight: Math.max(2, widthIn/2.5),
+    opacity: 0.92, dashArray: _activeType.id==='crosswalk'?'8,6':null
+  });
+  linesLayer.addLayer(layer);
+
+  paintLines.push({
+    id:_lineId++, typeId:_activeType.id, typeName:_activeType.name,
+    label, widthIn, lengthFt, color, layer
+  });
+
+  refreshLineList(); updateResults(); autoSave();
+  showToast(`${label} — ${fmt(lengthFt,0)} ft`);
+  stopLineDrawing();
+});
+
+// Also handle EDITED and DELETED for paint lines
+map.on(L.Draw.Event.EDITED, e=>{
+  e.layers.eachLayer(l=>{
+    const pl = paintLines.find(x=>x.layer===l);
+    if(pl){
+      pl.lengthFt = turf.length(l.toGeoJSON(),{units:'meters'}) * M_FT;
+    }
+  });
+  refreshLineList(); updateResults(); autoSave();
+});
+map.on(L.Draw.Event.DELETED, e=>{
+  e.layers.eachLayer(l=>{
+    const i = paintLines.findIndex(x=>x.layer===l);
+    if(i!==-1) paintLines.splice(i,1);
+  });
+  refreshLineList(); updateResults(); autoSave();
+});
+
+// ── Line list refresh ─────────────────────────────────────────
+function refreshLineList(){
+  const list = document.getElementById('lt-list');
+  set('lt-count', paintLines.length);
+  set('lt-count-layers', paintLines.length);
+
+  // Total footage
+  const totalFt = paintLines.reduce((a,l)=>a+l.lengthFt,0);
+  setFlash('lt-total-ft', fmt(totalFt,0));
+
+  if(!paintLines.length){
+    list.innerHTML='<div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No lines yet.</div>';
+    document.getElementById('lt-breakdown').innerHTML='<div style="font-size:10px;color:var(--text-dim);text-align:center;padding:4px">No lines traced yet.</div>';
+    return;
+  }
+
+  // Individual line items
+  list.innerHTML='';
+  paintLines.forEach(pl=>{
+    list.appendChild(mkItem(pl.id, pl.color, pl.label,
+      `${pl.typeName} · ${pl.widthIn}" · ${fmt(pl.lengthFt,0)} ft`,
+      id=>{
+        const i=paintLines.findIndex(x=>x.id===id);
+        if(i!==-1){ linesLayer.removeLayer(paintLines[i].layer); paintLines.splice(i,1); }
+        refreshLineList(); updateResults(); autoSave();
+      }
+    ));
+  });
+
+  // Per-type breakdown
+  buildTypeBreakdown();
+}
+
+function buildTypeBreakdown(){
+  const wrap = document.getElementById('lt-breakdown');
+  // Group by typeId
+  const groups = {};
+  paintLines.forEach(pl=>{
+    if(!groups[pl.typeId]) groups[pl.typeId]={name:pl.typeName,color:pl.color,widthIn:pl.widthIn,ft:0,count:0};
+    groups[pl.typeId].ft    += pl.lengthFt;
+    groups[pl.typeId].count += 1;
+  });
+  wrap.innerHTML='';
+  Object.values(groups).forEach(g=>{
+    const row=document.createElement('div');
+    row.className='td-row';
+    row.innerHTML=`
+      <div class="td-swatch" style="background:${g.color}"></div>
+      <div class="td-name">${g.name} (${g.count})</div>
+      <div class="td-ft">${fmt(g.ft,0)} ft</div>`;
+    wrap.appendChild(row);
+  });
+}
+
+// Aggregate traced footage by type for paint calc
+function getTracedByType(){
+  const groups = {};
+  paintLines.forEach(pl=>{
+    if(!groups[pl.typeId]) groups[pl.typeId]={name:pl.typeName,color:pl.color,widthIn:pl.widthIn,ft:0};
+    groups[pl.typeId].ft += pl.lengthFt;
+  });
+  return Object.values(groups);
+}
+function getTotalTracedFt(){ return paintLines.reduce((a,l)=>a+l.lengthFt,0); }
+
+// ══════════════════════════════════════════════════════════════
+//  UPDATE ALL RESULTS
+// ══════════════════════════════════════════════════════════════
+function updateResults(){
+  let totalAreaM2=0,totalPerimM=0;
+  shapes.forEach(s=>{totalAreaM2+=s.areaM2||0;totalPerimM+=s.perimM||0;});
+  const sqft=totalAreaM2*M2_SQFT, perimFt=totalPerimM*M_FT;
+
+  setFlash('r-sqft',  totalAreaM2?fmt(sqft,0):'—');
+  set('r-sqm',   totalAreaM2?fmt(totalAreaM2,1):'—');
+  set('r-acres', totalAreaM2?fmt(totalAreaM2*M2_ACRES,3):'—');
+  setFlash('r-perim', totalPerimM?fmt(perimFt,0):'—');
+
+  const totalStalls=stallRows.reduce((a,r)=>a+r.count,0);
+  const totalLineFt=stallRows.reduce((a,r)=>a+r.lineFt,0);
+  const aisleArea  =stallRows.reduce((a,r)=>a+(r.count*r.stallW*r.aisleWidth),0);
+  set('s-stalls',totalStalls);
+  set('s-rows',stallRows.length);
+  setFlash('s-lineft',fmt(totalLineFt,0));
+  set('s-aisle',stallRows.length?fmt(aisleArea,0):'—');
+
+  const widthIn =parseFloat(document.getElementById('line-width').value)||4;
+  const coverage=parseFloat(document.getElementById('coverage-rate').value)||320;
+  const wastePct=parseFloat(document.getElementById('waste-pct').value)||10;
+  const coats   =parseInt(document.getElementById('coats').value)||1;
+  let   mode    =document.getElementById('estimate-mode').value;
+
+  if(mode==='auto'){
+    if(getTotalTracedFt()>0) mode='traced';
+    else if(totalLineFt>0)   mode='stalls';
+    else if(perimFt>0)       mode='perimeter';
+    else{ set('r-gallons','—');set('r-linear','—');set('r-paint-area','—');
+          set('r-formula','Trace lines in the Lines tab, or place stalls to begin.');
+          document.getElementById('r-type-breakdown').style.display='none';
+          return; }
+  }
+
+  let linearFt=0,gallons=0,paintArea=0,lines=[];
+  const bd = document.getElementById('r-type-breakdown');
+
+  if(mode==='traced'){
+    const tracedFt = getTotalTracedFt();
+    if(!tracedFt){ set('r-gallons','—');set('r-linear','—');set('r-paint-area','—');
+                   set('r-formula','No lines traced yet.\nOpen the Lines tab and trace your paint lines.');
+                   bd.style.display='none'; return; }
+    // Per-type calc
+    const byType = getTracedByType();
+    let totalGal = 0, totalArea = 0;
+    bd.innerHTML='';
+    bd.style.display='flex';
+    byType.forEach(g=>{
+      const r = calcPaint(g.ft, g.widthIn, coverage, wastePct, coats);
+      totalGal  += r.totalGallons;
+      totalArea += r.paintAreaSqFt;
+      const row = document.createElement('div');
+      row.className='td-row';
+      row.innerHTML=`<div class="td-swatch" style="background:${g.color}"></div>
+        <div class="td-name">${g.name} · ${g.widthIn}"</div>
+        <div class="td-ft">${fmt(g.ft,0)} ft</div>
+        <div class="td-gal">${fmt(r.totalGallons,2)} gal</div>`;
+      bd.appendChild(row);
+    });
+    gallons=totalGal; paintArea=totalArea; linearFt=tracedFt;
+    lines=[`Source : Traced Lines (${paintLines.length} segments)`,
+           `Total  : ${fmt(tracedFt,0)} ft across ${byType.length} type(s)`,
+           `Area   : ${fmt(totalArea,1)} ft²`,
+           `Raw    : ${fmt(totalArea/coverage,3)} gal`,
+           `Waste  : +${wastePct}% → ×${(1+wastePct/100).toFixed(2)}`,
+           `Coats  : ×${coats} = ${fmt(totalGal,2)} gal`];
+
+  }else if(mode==='stalls'){
+    bd.style.display='none';
+    if(!totalLineFt){set('r-gallons','—');set('r-linear','—');set('r-paint-area','—');
+                     set('r-formula','Place stall rows in the Stalls tab first.');return;}
+    const r=calcPaint(totalLineFt,widthIn,coverage,wastePct,coats);
+    linearFt=totalLineFt;gallons=r.totalGallons;paintArea=r.paintAreaSqFt;
+    lines=[`Source : Stall Lines`,`Rows   : ${stallRows.length}  ·  Stalls: ${totalStalls}`,
+           `Lin ft : ${fmt(totalLineFt,0)} ft`,`Width  : ${widthIn}" = ${(widthIn/12).toFixed(3)} ft`,
+           `Area   : ${fmt(r.paintAreaSqFt,1)} ft²`,
+           `Raw    : ${fmt(r.paintAreaSqFt,1)} ÷ ${coverage} = ${fmt(r.rawGallons,3)} gal`,
+           `Waste  : +${wastePct}% → ×${(1+wastePct/100).toFixed(2)}`,
+           `Coats  : ×${coats} = ${fmt(r.totalGallons,2)} gal`];
+  }else if(mode==='perimeter'){
+    bd.style.display='none';
+    if(!perimFt){set('r-gallons','—');set('r-linear','—');set('r-paint-area','—');
+                 set('r-formula','Draw a lot polygon first.');return;}
+    const r=calcPaint(perimFt,widthIn,coverage,wastePct,coats);
+    linearFt=perimFt;gallons=r.totalGallons;paintArea=r.paintAreaSqFt;
+    lines=[`Source : Perimeter Lines`,`Perim  : ${fmt(perimFt,0)} ft`,
+           `Width  : ${widthIn}" = ${(widthIn/12).toFixed(3)} ft`,
+           `Area   : ${fmt(r.paintAreaSqFt,1)} ft²`,
+           `Raw    : ${fmt(r.paintAreaSqFt,1)} ÷ ${coverage} = ${fmt(r.rawGallons,3)} gal`,
+           `Waste  : +${wastePct}% → ×${(1+wastePct/100).toFixed(2)}`,
+           `Coats  : ×${coats} = ${fmt(r.totalGallons,2)} gal`];
+  }else if(mode==='full'){
+    bd.style.display='none';
+    if(!sqft){set('r-gallons','—');set('r-linear','—');set('r-paint-area','—');
+              set('r-formula','Draw a lot polygon first.');return;}
+    const raw=sqft/coverage,ww=raw*(1+wastePct/100);
+    gallons=ww*coats;paintArea=sqft;linearFt=0;
+    lines=[`Source : Full Surface Coat`,`Area   : ${fmt(sqft,0)} ft²`,
+           `Raw    : ${fmt(sqft,0)} ÷ ${coverage} = ${fmt(raw,3)} gal`,
+           `Waste  : +${wastePct}% → ×${(1+wastePct/100).toFixed(2)}`,
+           `Coats  : ×${coats} = ${fmt(gallons,2)} gal`];
+  }
+
+  setFlash('r-gallons',  fmt(gallons,2));
+  set('r-linear',    linearFt>0?fmt(linearFt,0):'—');
+  set('r-paint-area',fmt(paintArea,1));
+  set('r-formula',   lines.join('\n'));
+}
+
+// ══════════════════════════════════════════════════════════════
+//  LAYER LISTS
+// ══════════════════════════════════════════════════════════════
+function refreshShapeList(){
+  const list=document.getElementById('shape-list');
+  set('shape-count',shapes.length);
+  if(!shapes.length){list.innerHTML='<div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No shapes yet.</div>';return;}
+  list.innerHTML='';
+  shapes.forEach(s=>{
+    const meta=s.type==='polyline'?`${fmt((s.perimM||0)*M_FT,0)} ft`:`${fmt((s.areaM2||0)*M2_SQFT,0)} ft²`;
+    list.appendChild(mkItem(s.id,s.color,s.label,meta,id=>{
+      const i=shapes.findIndex(x=>x.id===id);
+      if(i!==-1){drawnItems.removeLayer(shapes[i].layer);shapes.splice(i,1);}
+      refreshShapeList();updateResults();autoSave();
+    }));
+  });
+}
+function refreshStallList(){
+  const list=document.getElementById('stall-list');
+  set('stall-count',stallRows.length);
+  if(!stallRows.length){list.innerHTML='<div style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">No rows placed.</div>';return;}
+  list.innerHTML='';
+  stallRows.forEach(r=>{
+    list.appendChild(mkItem(r.id,r.color,r.label,
+      `${r.count} stalls · ${r.angle}° · ${fmt(r.lineFt,0)} ft`,
+      id=>{
+        const i=stallRows.findIndex(x=>x.id===id);
+        if(i!==-1){stallLayer.removeLayer(stallRows[i].group);stallRows.splice(i,1);}
+        refreshStallList();updateResults();autoSave();
+      }
+    ));
+  });
+}
+function mkItem(id,color,label,meta,onDel){
+  const el=document.createElement('div');
+  el.className='li';
+  el.innerHTML=`<div class="li-sw" style="background:${color}"></div><div class="li-name">${label}</div><div class="li-meta">${meta}</div><button class="li-del" title="Remove">✕</button>`;
+  el.querySelector('.li-del').addEventListener('click',()=>onDel(id));
+  return el;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  SIDEBAR TABS
+// ══════════════════════════════════════════════════════════════
+function showTab(id){
+  document.querySelectorAll('.s-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===id));
+  document.querySelectorAll('.s-panel').forEach(p=>p.classList.toggle('active',p.id===id));
+}
+document.querySelectorAll('.s-tab').forEach(t=>t.addEventListener('click',()=>showTab(t.dataset.tab)));
+
+// ══════════════════════════════════════════════════════════════
+//  CONTROLS
+// ══════════════════════════════════════════════════════════════
+document.getElementById('recalc-btn').addEventListener('click',()=>{updateResults();showToast('Recalculated ✓');});
+document.getElementById('clear-shapes-btn').addEventListener('click',()=>{
+  if(!shapes.length)return;
+  if(!confirm('Clear all lot shapes?'))return;
+  drawnItems.clearLayers();shapes=[];_colorIdx=0;
+  refreshShapeList();updateResults();autoSave();showToast('Shapes cleared');
+});
+['line-width','coverage-rate','waste-pct','coats','estimate-mode']
+  .forEach(id=>document.getElementById(id).addEventListener('input',updateResults));
+
+// ══════════════════════════════════════════════════════════════
+//  SEARCH
+// ══════════════════════════════════════════════════════════════
+async function doSearch(){
+  const q=document.getElementById('search-input').value.trim();
+  if(!q)return;
+  showHUD('Searching…',true);
+  try{
+    const data=await(await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`
+    )).json();
+    hideHUD();
+    if(data?.length){
+      map.setView([parseFloat(data[0].lat),parseFloat(data[0].lon)],17,{animate:true,duration:.5});
+      showToast(`📍 ${data[0].display_name.split(',').slice(0,2).join(', ')}`);
+    }else showToast('Location not found');
+  }catch{hideHUD();showToast('Search error');}
+}
+document.getElementById('search-btn').addEventListener('click',doSearch);
+document.getElementById('search-input').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
+
+// ══════════════════════════════════════════════════════════════
+//  SAVE / LOAD / EXPORT
+// ══════════════════════════════════════════════════════════════
+function buildPayload(){
+  return{
+    v:3,
+    shapes:shapes.map(s=>({id:s.id,type:s.type,label:s.label,color:s.color,areaM2:s.areaM2,perimM:s.perimM,geoJson:s.layer.toGeoJSON()})),
+    stallRows:stallRows.map(r=>({id:r.id,label:r.label,color:r.color,angle:r.angle,count:r.count,stallW:r.stallW,stallD:r.stallD,rowRotation:r.rowRotation,aisleWidth:r.aisleWidth,lineFt:r.lineFt,centerLat:r.centerLat,centerLng:r.centerLng})),
+    paintLines:paintLines.map(l=>({id:l.id,typeId:l.typeId,typeName:l.typeName,label:l.label,widthIn:l.widthIn,lengthFt:l.lengthFt,color:l.color,geoJson:l.layer.toGeoJSON()}))
+  };
+}
+function autoSave(){ try{localStorage.setItem('plot_v1',JSON.stringify(buildPayload()));}catch(e){} }
+
+document.getElementById('save-btn').addEventListener('click',()=>{autoSave();showToast('Saved ✓');});
+document.getElementById('export-btn').addEventListener('click',(e)=>{
+  // Guard: ignore if guided mode is active (prevents tap-through from permission dialogs)
+  if(_gActive){ e.stopPropagation(); return; }
+  const p=buildPayload();
+  p.summary={
+    totalStalls:stallRows.reduce((a,r)=>a+r.count,0),
+    totalStallLineFt:Math.round(stallRows.reduce((a,r)=>a+r.lineFt,0)),
+    totalLotSqFt:Math.round(shapes.reduce((a,s)=>a+(s.areaM2||0),0)*M2_SQFT),
+    exportedAt:new Date().toISOString()
+  };
+  const blob=new Blob([JSON.stringify(p,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`plot_${Date.now()}.json`;a.click();
+  showToast('Exported ✓');
+});
+document.getElementById('load-btn').addEventListener('click',(e)=>{
+  if(_gActive){ e.stopPropagation(); return; }
+  const raw=localStorage.getItem('plot_v1');
+  if(!raw){showToast('No saved project found');return;}
+  try{loadPayload(JSON.parse(raw));showToast(`Loaded ${shapes.length} shape(s) + ${stallRows.length} row(s)`);}
+  catch(e){showToast('Load failed');}
+});
+
+function loadPayload(data){
+  drawnItems.clearLayers();stallLayer.clearLayers();
+  shapes=[];stallRows=[];
+  (data.shapes||[]).forEach(s=>{
+    try{
+      let layer;
+      if(s.type==='polyline') layer=L.polyline(L.GeoJSON.coordsToLatLngs(s.geoJson.geometry.coordinates,0));
+      else layer=L.polygon(L.GeoJSON.coordsToLatLngs(s.geoJson.geometry.coordinates[0],0));
+      if(layer.setStyle) layer.setStyle({color:s.color,fillColor:s.color,fillOpacity:.13});
+      drawnItems.addLayer(layer);
+      shapes.push({id:s.id,type:s.type,label:s.label,color:s.color,areaM2:s.areaM2,perimM:s.perimM,layer});
+    }catch(e){console.warn(e);}
+  });
+  (data.stallRows||[]).forEach(r=>{
+    try{
+      const center=L.latLng(r.centerLat,r.centerLng);
+      const group=buildStallGroup(center,r.angle,r.count,r.stallW,r.stallD,r.rowRotation||0);
+      group.setStyle({color:r.color,fillColor:r.color});
+      stallLayer.addLayer(group);
+      stallRows.push({...r,group});
+    }catch(e){console.warn(e);}
+  });
+  // Restore paint lines
+  (data.paintLines||[]).forEach(l=>{
+    try{
+      const layer=L.polyline(L.GeoJSON.coordsToLatLngs(l.geoJson.geometry.coordinates,0));
+      layer.setStyle({color:l.color,weight:Math.max(2,l.widthIn/2.5),opacity:.92});
+      linesLayer.addLayer(layer);
+      paintLines.push({...l,layer});
+    }catch(e){console.warn(e);}
+  });
+  _lineId  = paintLines.length?Math.max(...paintLines.map(l=>l.id))+1:0;
+  _shapeId = shapes.length?Math.max(...shapes.map(s=>s.id))+1:0;
+  _stallId = stallRows.length?Math.max(...stallRows.map(r=>r.id))+1:0;
+  if(shapes.length)     map.fitBounds(drawnItems.getBounds(),{padding:[40,40]});
+  else if(stallRows.length) map.fitBounds(stallLayer.getBounds(),{padding:[40,40]});
+  else if(paintLines.length) map.fitBounds(linesLayer.getBounds(),{padding:[40,40]});
+  refreshShapeList(); refreshStallList(); refreshLineList(); updateResults();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  UTILITIES
+// ══════════════════════════════════════════════════════════════
+function fmt(n,dec=0){
+  if(!isFinite(n)||n==null)return'—';
+  return n.toLocaleString('en-CA',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+}
+function set(id,val){const el=document.getElementById(id);if(el)el.textContent=val;}
+function setFlash(id,val){
+  const el=document.getElementById(id);
+  if(!el)return;
+  if(el.textContent!==val){
+    el.textContent=val;
+    const sb=el.closest('.sb');
+    if(sb){sb.classList.remove('flash');void sb.offsetWidth;sb.classList.add('flash');}
+  }
+}
+
+let _tt;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+/* ════════════════════════════════════════════════════════════
+   STAGE 3 — Line Planning
+   Individual paint-line polylines per type (divider, stripe,
+   stop bar, arrow). Each type has a default width.
+   calcPaint() already accepts any linear footage + width.
+
+   STAGE 4 — Roadway / Highway Mode
+   OSM highway query on long-press: way["highway"](bbox)
+   Dash formula: dashCount = floor(len / (dashLen + gapLen))
+   MUTCD presets: broken 10/30, lane-change 3/9, edge solid.
+
+   STAGE 5 — Polish
+   PDF summary, image canvas fallback, multi-project slots.
+   ════════════════════════════════════════════════════════════ */
+
+// ── INIT ─────────────────────────────────────────────────────
+refreshShapeList(); refreshStallList(); updateResults();
+
+// Auto-detect near center only in expert mode
+map.once('load', ()=>{
+  if(!_gActive && !localStorage.getItem('plot_v1')) autoDetectNearCenter();
+});
+setTimeout(()=>{ if(!_gActive && !localStorage.getItem('plot_v1') && !shapes.length) autoDetectNearCenter(); }, 1200);
+
+async function autoDetectNearCenter(){
+  const center = map.getCenter();
+  showHUD('Auto-detecting nearby lots…', true);
+  try{
+    const R = 0.002;
+    const b = `${center.lat-R},${center.lng-R},${center.lat+R},${center.lng+R}`;
+    const q = `[out:json][timeout:14];(way["amenity"="parking"](${b});way["landuse"="parking"](${b});way["parking"="surface"](${b}););out geom;`;
+    const data = await queryOverpass(q);
+    hideHUD();
+    if(data.elements?.length){
+      // Draw ALL found polygons, not just the closest
+      let totalArea = 0;
+      data.elements.forEach(el=>{
+        if(!el.geometry?.length) return;
+        const lls   = el.geometry.map(n=>L.latLng(n.lat,n.lon));
+        const color = PALETTE[_colorIdx++%PALETTE.length];
+        const layer = L.polygon(lls,{
+          color, fillColor:color, weight:2.5, fillOpacity:.13, className:'detected-lot'
+        });
+        drawnItems.addLayer(layer);
+        const {areaM2,perimM} = shapeMetrics(layer,'polygon');
+        totalArea += areaM2;
+        shapes.push({ id:_shapeId++, type:'polygon',
+          label: el.tags?.name || `Lot ${shapes.length+1}`,
+          color, areaM2, perimM, layer });
+      });
+      if(shapes.length) map.fitBounds(drawnItems.getBounds(),{padding:[40,40],animate:true});
+      refreshShapeList(); updateResults(); autoSave();
+      showToast(`${shapes.length} lot(s) auto-detected — ${Math.round(totalArea*M2_SQFT).toLocaleString('en-CA')} sq ft total`);
+      showTab('tab-lot');
+    }
+  } catch(e){ hideHUD(); }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GUIDED MODE
+//  5 steps: Find → Scan → What to Paint → Walk & Trace → Estimate
+// ══════════════════════════════════════════════════════════════
+
+// Line types available in guided flow
+const G_LINE_TYPES = [
+  {id:'divider',   name:'Stall Divider', widthIn:4,  color:'#f5c842', icon:'⬦', desc:'Between each stall'},
+  {id:'front',     name:'Front Stripe',  widthIn:4,  color:'#e87f3a', icon:'▬', desc:'Along front of stalls'},
+  {id:'stopbar',   name:'Stop Bar',      widthIn:12, color:'#f87171', icon:'█', desc:'At intersections'},
+  {id:'crosswalk', name:'Crosswalk',     widthIn:6,  color:'#a78bfa', icon:'≡', desc:'Pedestrian crossing'},
+  {id:'curb',      name:'Curb Line',     widthIn:6,  color:'#60a5fa', icon:'⌒', desc:'Along curb edges'},
+  {id:'arrow',     name:'Arrow',         widthIn:24, color:'#34d399', icon:'↑', desc:'Direction markers'},
+  {id:'doubleyel', name:'Double Yellow', widthIn:4,  color:'#fde68a', icon:'⬌', desc:'Centre line'},
+  {id:'custom',    name:'Custom',        widthIn:4,  color:'#c8ccde', icon:'✎', desc:'Any other line'},
+];
+
+// Guided state
+let _gActive      = false;
+let _gTypes       = [];   // selected line types from step 2.5
+let _gTypeIdx     = 0;    // current type being traced
+let _gRestripe    = false;
+let _gCoverage    = 320;
+let _gWatchId     = null; // geolocation watchPosition ID
+let _gTracing     = false;
+let _gPaused      = false;
+let _gLastPos     = null; // {lat,lng} last recorded breadcrumb point
+let _gCurrentLine = null; // active latlng array being built
+let _gCurrentLayer= null; // active Leaflet polyline on map
+let _gSegCount    = 0;    // segments finished for this type
+const GPS_MIN_DIST_M = 3; // min meters between breadcrumb points
+
+// ── Helpers ───────────────────────────────────────────────────
+function gScreen(id){
+  document.querySelectorAll('.g-screen').forEach(s=>s.classList.remove('active'));
+  const el = document.getElementById(id);
+  if(el) el.classList.add('active');
+}
+
+let _gLotCount = 0; // lots confirmed this session
+
+function enterGuided(){
+  _gActive = true;
+  _gLotCount = 0;
+  document.body.classList.add('guided-mode');
+  document.getElementById('guided').style.display='block';
+  document.getElementById('btn-advanced').classList.add('show');
+  document.getElementById('topbar').classList.remove('show');
+  document.getElementById('sidebar').classList.remove('show');
+  gScreen('s-welcome');
+}
+
+function exitGuided(){
+  _gActive = false;
+  gStopGPS();
+  document.body.classList.remove('guided-mode');
+  document.getElementById('guided').style.display='none';
+  document.getElementById('btn-advanced').classList.remove('show');
+  document.getElementById('gps-dot').classList.remove('active');
+  document.getElementById('gps-accuracy').classList.remove('active');
+  document.getElementById('topbar').classList.add('show');
+  document.getElementById('sidebar').classList.add('show');
+  map.invalidateSize();
+}
+
+// ── Boot logic ────────────────────────────────────────────────
+// First visit → guided. Returning user with save → expert.
+(function boot(){
+  // Clear any stale saves from previous builds
+  localStorage.removeItem('plot_v1');
+  refreshShapeList(); refreshStallList(); updateResults();
+  enterGuided();
+})();
+
+// ── Button wiring ─────────────────────────────────────────────
+document.getElementById('btn-advanced').addEventListener('click', exitGuided);
+document.getElementById('btn-guided-return').addEventListener('click', enterGuided);
+document.getElementById('g-btn-advanced').addEventListener('click', ()=>{ exitGuided(); showTab('tab-paint'); });
+
+// ── STEP 1: Search ────────────────────────────────────────────
+function gDebounce(fn,ms){ let t; return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms);}; }
+
+async function gDoSearch(){
+  const q = (document.getElementById('g-input').value||'').trim();
+  if(q.length < 2) return;
+  try{
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`,
+      {headers:{'Accept-Language':'en'}}
+    );
+    const data = await res.json();
+    const wrap = document.getElementById('g-results');
+    wrap.innerHTML = '';
+    data.forEach(r=>{
+      const el = document.createElement('div');
+      el.className = 'g-result';
+      el.textContent = r.display_name;
+      el.addEventListener('click', ()=>{
+        map.setView([+r.lat, +r.lon], 18, {animate:true});
+        wrap.innerHTML = '';
+        document.getElementById('g-input').value = r.display_name.split(',').slice(0,2).join(', ');
+        setTimeout(gGoScan, 600);
+      });
+      wrap.appendChild(el);
+    });
+  }catch(e){}
+}
+
+document.getElementById('g-search-btn').addEventListener('click', gDoSearch);
+document.getElementById('g-input').addEventListener('keydown', e=>{ if(e.key==='Enter') gDoSearch(); });
+document.getElementById('g-input').addEventListener('input', gDebounce(gDoSearch, 550));
+
+document.getElementById('g-locate-btn').addEventListener('click', ()=>{
+  if(!navigator.geolocation){
+    showToast('Location not supported on this device');
+    return;
+  }
+  const btn = document.getElementById('g-locate-btn');
+  btn.textContent = '⏳ Getting location…';
+  btn.disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      btn.textContent = '📍 Use My Location';
+      btn.disabled = false;
+      map.setView([pos.coords.latitude, pos.coords.longitude], 18, {animate:true});
+      setTimeout(gGoScan, 500);
+    },
+    err=>{
+      btn.textContent = '📍 Use My Location';
+      btn.disabled = false;
+      const msg = err.code === 1
+        ? 'Location permission denied — enable it in your browser settings'
+        : 'Could not get location — try searching instead';
+      showToast(msg);
+    },
+    {enableHighAccuracy:true, timeout:12000, maximumAge:0}
+  );
+});
+
+// ── STEP 2: Center & AI Scan ──────────────────────────────────
+const G_LOT_COLOR  = '#3ddc84'; // always green
+const G_MAX_LOTS   = 3;
+
+function gGoScan(){
+  gScreen('s-scan');
+  document.getElementById('scan-float').style.display        = '';
+  document.getElementById('scan-result-float').style.display = 'none';
+  document.getElementById('scan-pill').style.display         = 'none';
+  document.getElementById('scan-pill').classList.remove('green-radar');
+  gLogoScanning(false);
+
+  if(_gLotCount === 0){
+    document.getElementById('scan-float-title').textContent = 'Is this your lot?';
+    document.getElementById('scan-float-sub').textContent   = 'Pan and zoom until your lot is centered on screen, then tap Scan.';
+    document.getElementById('g-btn-im-here').textContent    = '🔍 Scan This Lot';
+  } else {
+    document.getElementById('scan-float-title').textContent = `Add lot ${_gLotCount + 1} of ${G_MAX_LOTS}`;
+    document.getElementById('scan-float-sub').textContent   = `Pan to the next lot and center it on screen, then tap Scan.`;
+    document.getElementById('g-btn-im-here').textContent    = `🔍 Scan Lot ${_gLotCount + 1}`;
+  }
+}
+
+function gTriggerGlitch(durationMs=600){
+  const el = document.getElementById('glitch-overlay');
+  el.classList.add('active');
+  setTimeout(()=>el.classList.remove('active'), durationMs);
+}
+
+function gLogoScanning(on){
+  document.querySelector('.g-logo')?.classList.toggle('scanning', on);
+}
+
+// User confirms → AI scans
+document.getElementById('g-btn-im-here').addEventListener('click', async ()=>{
+  document.getElementById('scan-float').style.display = 'none';
+  const pill = document.getElementById('scan-pill');
+  pill.style.display = 'flex';
+  pill.classList.add('green-radar');
+  document.getElementById('scan-pill-text').textContent = 'Let me see if I can find it…';
+  gLogoScanning(true);
+
+  const center    = map.getCenter();
+  const radiusDeg = Math.max(0.0004, (map.getBounds().getEast() - map.getBounds().getWest()) * 0.3);
+
+  try{
+    const R=radiusDeg, b=`${center.lat-R},${center.lng-R},${center.lat+R},${center.lng+R}`;
+    const q=`[out:json][timeout:14];(way["amenity"="parking"](${b});way["landuse"="parking"](${b});way["parking"="surface"](${b}););out geom;`;
+    let resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q)});
+    let data=await resp.json();
+
+    if(!data.elements?.length){
+      const R2=R*3, b2=`${center.lat-R2},${center.lng-R2},${center.lat+R2},${center.lng+R2}`;
+      const q2=`[out:json][timeout:14];(way["amenity"="parking"](${b2});way["landuse"="parking"](${b2}););out geom;`;
+      resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q2)});
+      data=await resp.json();
+    }
+
+    pill.style.display='none';
+    pill.classList.remove('green-radar');
+    gLogoScanning(false);
+
+    if(!data.elements?.length){
+      document.getElementById('scan-float').style.display='';
+      document.getElementById('scan-float-title').textContent='Nothing found here';
+      document.getElementById('scan-float-sub').textContent="I couldn't find any lot data at this location. Try zooming in closer, or draw the boundary manually.";
+      document.getElementById('g-btn-im-here').textContent='🔍 Try Again';
+      return;
+    }
+
+    // Pick closest element to map center
+    let best=null, bestD=Infinity;
+    data.elements.forEach(el=>{
+      if(!el.geometry?.length) return;
+      const cLat=el.geometry.reduce((a,n)=>a+n.lat,0)/el.geometry.length;
+      const cLng=el.geometry.reduce((a,n)=>a+n.lon,0)/el.geometry.length;
+      const d=Math.hypot(cLat-center.lat,cLng-center.lng);
+      if(d<bestD){bestD=d;best=el;}
+    });
+
+    if(!best?.geometry?.length){
+      document.getElementById('scan-float').style.display='';
+      document.getElementById('scan-float-title').textContent="Couldn't read that lot";
+      document.getElementById('scan-float-sub').textContent="The data came back incomplete. Try adjusting the map or draw manually.";
+      document.getElementById('g-btn-im-here').textContent='🔍 Try Again';
+      return;
+    }
+
+    // Draw green polygon
+    const lls   = best.geometry.map(n=>L.latLng(n.lat,n.lon));
+    const layer = L.polygon(lls,{
+      color:G_LOT_COLOR, fillColor:G_LOT_COLOR,
+      weight:2.5, fillOpacity:.12,
+      className:'detected-lot'
+    });
+    drawnItems.addLayer(layer);
+    map.fitBounds(layer.getBounds(),{padding:[44,160],animate:true});
+
+    const {areaM2,perimM}=shapeMetrics(layer,'polygon');
+    const lotNum = shapes.length + 1;
+    shapes.push({
+      id:_shapeId++, type:'polygon',
+      label:best.tags?.name||`Lot ${lotNum}`,
+      color:G_LOT_COLOR, areaM2, perimM, layer
+    });
+    refreshShapeList(); updateResults(); autoSave();
+
+    // Glitch — AI just did something significant
+    setTimeout(()=>gTriggerGlitch(500), 200);
+
+    const sqft = Math.round(areaM2*M2_SQFT);
+    const name = best.tags?.name||best.tags?.['addr:street']||'Parking Lot';
+    const confirmedSoFar = _gLotCount; // how many already confirmed before this one
+    const canAddMore = confirmedSoFar < G_MAX_LOTS - 1;
+
+    document.getElementById('confirm-lot-name').textContent = name;
+    document.getElementById('confirm-lot-meta').textContent = `${sqft.toLocaleString('en-CA')} sq ft  ·  ${Math.round(perimM*M_FT).toLocaleString('en-CA')} ft perimeter`;
+    document.getElementById('confirm-lot-sub').textContent  = confirmedSoFar === 0
+      ? `Found it. That's roughly ${Math.round(sqft/330)} stalls worth of space. Does the green outline look right?`
+      : `Lot ${confirmedSoFar+1} found — ${sqft.toLocaleString('en-CA')} sq ft. Does this outline look right?`;
+    document.getElementById('g-lot-label').textContent      = `Lot ${confirmedSoFar+1} of ${G_MAX_LOTS}`;
+    document.getElementById('g-btn-add-lot').style.display  = canAddMore ? '' : 'none';
+    document.getElementById('scan-result-float').style.display = '';
+
+  }catch(e){
+    pill.style.display='none';
+    pill.classList.remove('green-radar');
+    gLogoScanning(false);
+    document.getElementById('scan-float').style.display='';
+    document.getElementById('scan-float-title').textContent='Scan failed';
+    document.getElementById('scan-float-sub').textContent="Couldn't reach the satellite data. Check your connection and try again.";
+    document.getElementById('g-btn-im-here').textContent='🔍 Try Again';
+  }
+});
+
+// ── Map rotation ──────────────────────────────────────────────
+let _mapBearing = 0;
+
+function setMapBearing(deg){
+  _mapBearing = ((deg % 360) + 360) % 360;
+  const d = _mapBearing > 180 ? _mapBearing - 360 : _mapBearing; // -180 to 180
+  // Rotate the entire map container's tile pane
+  const panes = ['tilePane','overlayPane','markerPane','shadowPane','tooltipPane','popupPane'];
+  panes.forEach(p => {
+    const el = map.getPane(p);
+    if(el) el.style.transform = `rotate(${_mapBearing}deg)`;
+  });
+  // Also rotate the SVG overlay (drawn shapes)
+  const svg = map.getPane('overlayPane')?.querySelector('svg');
+  if(svg) svg.style.transform = `rotate(${_mapBearing}deg)`;
+  document.getElementById('map-rot-val').textContent = Math.round(_mapBearing);
+}
+
+function resetMapBearing(){
+  setMapBearing(0);
+}
+
+document.getElementById('map-rot-cw').addEventListener('click',  ()=> setMapBearing(_mapBearing + 5));
+document.getElementById('map-rot-ccw').addEventListener('click', ()=> setMapBearing(_mapBearing - 5));
+document.getElementById('map-rot-reset').addEventListener('click', resetMapBearing);
+
+// Reset bearing when leaving scan screen
+function gResetMapOnConfirm(){ /* bearing intentionally kept — user set it */ }
+
+// Confirm this lot → proceed to job type
+document.getElementById('g-btn-confirm').addEventListener('click', ()=>{
+  _gLotCount++;
+  document.getElementById('scan-result-float').style.display='none';
+  gScreen('s-whatpaint');
+  document.querySelectorAll('.g-job-chip').forEach(el=>{
+    el.onclick = ()=>el.classList.toggle('checked');
+  });
+});
+
+// Add another lot — keep this one, go back to scan
+document.getElementById('g-btn-add-lot').addEventListener('click', ()=>{
+  _gLotCount++;
+  document.getElementById('scan-result-float').style.display='none';
+  gGoScan();
+});
+
+document.getElementById('g-btn-rescan').addEventListener('click', ()=>{
+  // Remove the last drawn shape (the unconfirmed one)
+  if(shapes.length){ drawnItems.removeLayer(shapes.pop().layer); refreshShapeList(); updateResults(); }
+  document.getElementById('scan-result-float').style.display='none';
+  document.getElementById('scan-float').style.display='';
+  document.getElementById('scan-float-title').textContent="Let's try that again";
+  document.getElementById('scan-float-sub').textContent='Adjust the map so your lot is centered, then confirm.';
+  document.getElementById('g-btn-im-here').textContent='🔍 Scan Again';
+});
+
+// ── Guided draw mode ──────────────────────────────────────────
+let _guidedDrawHandler = null;
+let _guidedDrawPoints  = 0;
+
+function gStartDraw(){
+  // Hide scan float, show draw float
+  document.getElementById('scan-float').style.display        = 'none';
+  document.getElementById('scan-result-float').style.display = 'none';
+  document.getElementById('draw-float').style.display        = '';
+  document.getElementById('draw-point-count').textContent    = '0';
+  document.getElementById('g-btn-draw-finish').style.display = 'none';
+  _guidedDrawPoints = 0;
+
+  // Start Leaflet.draw polygon handler
+  _guidedDrawHandler = new L.Draw.Polygon(map, {
+    shapeOptions:{ color:G_LOT_COLOR, fillColor:G_LOT_COLOR, weight:2.5, fillOpacity:.12 },
+    showArea:false,
+    showLength:false,
+    touchIcon: new L.DivIcon({ className:'leaflet-div-icon', iconSize:[10,10] })
+  });
+  _guidedDrawHandler.enable();
+
+  // Count vertices as user taps
+  map.on('draw:drawvertex', _onDrawVertex);
+}
+
+function _onDrawVertex(){
+  _guidedDrawPoints++;
+  document.getElementById('draw-point-count').textContent = _guidedDrawPoints;
+  // Show finish button after 3 points
+  document.getElementById('g-btn-draw-finish').style.display = _guidedDrawPoints >= 3 ? '' : 'none';
+  document.getElementById('draw-float-sub').textContent = _guidedDrawPoints >= 3
+    ? 'Tap Done to close the shape, or keep adding points.'
+    : 'Keep tapping to place corners. You need at least 3 points.';
+}
+
+function gCancelDraw(){
+  if(_guidedDrawHandler){ _guidedDrawHandler.disable(); _guidedDrawHandler = null; }
+  map.off('draw:drawvertex', _onDrawVertex);
+  _guidedDrawPoints = 0;
+  document.getElementById('draw-float').style.display = 'none';
+  document.getElementById('scan-float').style.display = '';
+}
+
+function gFinishDraw(){
+  if(_guidedDrawHandler) _guidedDrawHandler._finishShape();
+}
+
+document.getElementById('g-btn-draw').addEventListener('click',        gStartDraw);
+document.getElementById('g-btn-draw2').addEventListener('click',       gStartDraw);
+document.getElementById('g-btn-draw-cancel').addEventListener('click', gCancelDraw);
+document.getElementById('g-btn-draw-finish').addEventListener('click', gFinishDraw);
+
+// When Leaflet.draw fires CREATED in guided mode — handle it like a scan result
+map.on('draw:created', e => {
+  if(!_guidedDrawHandler) return; // not in guided draw mode
+  map.off('draw:drawvertex', _onDrawVertex);
+  _guidedDrawHandler = null;
+  _guidedDrawPoints  = 0;
+
+  document.getElementById('draw-float').style.display = 'none';
+
+  const layer = e.layer;
+  layer.setStyle({ color:G_LOT_COLOR, fillColor:G_LOT_COLOR, weight:2.5, fillOpacity:.12 });
+  drawnItems.addLayer(layer);
+  map.fitBounds(layer.getBounds(), { padding:[44,160], animate:true });
+
+  const { areaM2, perimM } = shapeMetrics(layer, 'polygon');
+  const lotNum  = shapes.length + 1;
+  const lotName = `Lot ${lotNum} (drawn)`;
+  const sqft    = Math.round(areaM2 * M2_SQFT);
+
+  shapes.push({ id:_shapeId++, type:'polygon', label:lotName, color:G_LOT_COLOR, areaM2, perimM, layer });
+  refreshShapeList(); updateResults(); autoSave();
+
+  gTriggerGlitch(350);
+
+  // Show the same confirm card as AI scan
+  const canAddMore = _gLotCount < G_MAX_LOTS - 1;
+  document.getElementById('g-lot-label').textContent      = `Lot ${_gLotCount+1} of ${G_MAX_LOTS}`;
+  document.getElementById('confirm-lot-name').textContent = lotName;
+  document.getElementById('confirm-lot-meta').textContent = `${sqft.toLocaleString('en-CA')} sq ft  ·  ${Math.round(perimM*M_FT).toLocaleString('en-CA')} ft perimeter`;
+  document.getElementById('confirm-lot-sub').textContent  = `Lot traced. Looking good — ${Math.round(sqft/330)} stalls worth of space.`;
+  document.getElementById('g-btn-add-lot').style.display  = canAddMore ? '' : 'none';
+  document.getElementById('scan-result-float').style.display = '';
+});
+
+// ── STEP 3: Job type ──────────────────────────────────────────
+document.getElementById('g-btn-to-trace').addEventListener('click', ()=>{
+  if(!document.querySelector('.g-job-chip.checked')){ showToast('Select at least one job type'); return; }
+
+  // Aggregate all confirmed lots
+  const totalSqft  = shapes.reduce((a,s)=>a+(s.areaM2||0)*M2_SQFT, 0);
+  const totalPerim = shapes.reduce((a,s)=>a+(s.perimM||0)*M_FT, 0);
+  const totalAcres = shapes.reduce((a,s)=>a+(s.areaM2||0)*0.000247105, 0);
+  const estStalls  = Math.round(totalSqft / 330);
+
+  document.getElementById('g-r-sqft').textContent  = Math.round(totalSqft).toLocaleString('en-CA');
+  document.getElementById('g-r-perim').textContent = Math.round(totalPerim).toLocaleString('en-CA');
+  document.getElementById('g-r-acres').textContent = totalAcres.toFixed(2);
+  document.getElementById('g-r-stalls').textContent= estStalls;
+
+  // AI summary title
+  const lotWord = shapes.length > 1 ? `${shapes.length} lots` : 'your lot';
+  document.getElementById('g-results-title').textContent = `I measured ${lotWord}`;
+  document.getElementById('g-results-sub').textContent   = shapes.length > 1
+    ? `Here's the combined total. Each lot is listed below — you can combine or keep them separate.`
+    : `Here's what I found. You can refine the outline or walk the lot for precision.`;
+
+  // Build per-lot breakdown
+  const listEl = document.getElementById('g-lot-list');
+  listEl.innerHTML = '';
+  shapes.forEach((s,i)=>{
+    const sqft = Math.round((s.areaM2||0)*M2_SQFT).toLocaleString('en-CA');
+    const row  = document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--steel);border:1px solid var(--border);border-radius:8px;font-size:12px;';
+    row.innerHTML=`<div style="width:8px;height:8px;border-radius:50%;background:${G_LOT_COLOR};flex-shrink:0"></div><div style="flex:1;color:var(--text)">${s.label}</div><div style="font-family:var(--fm);color:var(--accent)">${sqft} sq ft</div>`;
+    listEl.appendChild(row);
+  });
+
+  gScreen('s-results');
+});
+
+// ══════════════════════════════════════════════════════════════
+//  PHASE 2 — STALL LAYOUT
+// ══════════════════════════════════════════════════════════════
+const STALL_DEFAULTS = { w:9, d:18 };   // feet
+const AISLE_W        = 24;               // feet — standard two-way aisle
+const FT_TO_DEG      = 1/364000;         // approx degrees per foot (lat)
+const FT_TO_DEG_LNG  = (lat)=>1/(364000*Math.cos(lat*Math.PI/180));
+
+let _stallW      = STALL_DEFAULTS.w;
+let _stallD      = STALL_DEFAULTS.d;
+let _stallSnap   = true;
+let _stallLayer  = L.layerGroup().addTo(map);  // all stall polygons
+let _stallCells  = [];   // [{poly, dead, row, col}]
+let _stallOrigin = null; // {lat,lng} grid anchor
+let _stallAngle  = 0;    // degrees rotation
+let _stallSizePromptShown = false;
+let _stallDragActive = false;
+let _stallDragStart  = null;
+let _stallOriginSnap = null;
+
+// ── Helpers ───────────────────────────────────────────────────
+function ftToDeg(ft, lat){ return {dlat: ft*FT_TO_DEG, dlng: ft*FT_TO_DEG_LNG(lat||46.5)}; }
+
+function rotPt(cx,cy, x,y, deg){
+  const r=deg*Math.PI/180, cos=Math.cos(r), sin=Math.sin(r);
+  return [cx+(x-cx)*cos-(y-cy)*sin, cy+(x-cx)*sin+(y-cy)*cos];
+}
+
+function stallCellLatLngs(originLat, originLng, row, col, wFt, dFt, angleDeg){
+  const wD  = wFt  * FT_TO_DEG_LNG(originLat);
+  const dD  = dFt  * FT_TO_DEG;
+  const aD  = AISLE_W * FT_TO_DEG;
+  // Each row = stall depth + aisle
+  const rowH = dD + aD;
+  const x0 = originLng + col*wD;
+  const y0 = originLat + row*rowH;
+  // Stall corners (lng,lat) before rotation
+  const corners = [
+    [x0,      y0     ],
+    [x0+wD,   y0     ],
+    [x0+wD,   y0+dD  ],
+    [x0,      y0+dD  ],
+  ];
+  // Rotate around origin
+  return corners.map(([x,y])=>{
+    const [rx,ry] = rotPt(originLng, originLat, x, y, angleDeg);
+    return L.latLng(ry, rx);
+  });
+}
+
+function gUpdateStallStats(){
+  const active = _stallCells.filter(c=>!c.dead).length;
+  const wFt    = _stallW, dFt = _stallD;
+  const linFt  = active * (wFt*2 + dFt*2);   // perimeter of each stall
+  const sqft   = active * wFt * dFt;
+  document.getElementById('stall-live-count').textContent = `${active} stalls`;
+  document.getElementById('stall-live-ft').textContent    = `${Math.round(linFt).toLocaleString('en-CA')} linear ft`;
+  document.getElementById('stall-live-sqft').textContent  = `${Math.round(sqft).toLocaleString('en-CA')} sq ft`;
+}
+
+function gClearStallGrid(){
+  _stallLayer.clearLayers();
+  _stallCells = [];
+}
+
+// ── Snap anchor points from lot boundary ─────────────────────
+function gGetSnapAnchors(){
+  if(!shapes.length) return null;
+  const s    = shapes[shapes.length-1];
+  const lls  = s.layer.getLatLngs()[0];
+  // Find bottom-left corner (min lat, min lng)
+  let anchor = lls[0];
+  lls.forEach(ll=>{ if(ll.lat<anchor.lat || (ll.lat===anchor.lat && ll.lng<anchor.lng)) anchor=ll; });
+  return anchor;
+}
+
+function gGetLotAngle(){
+  if(!shapes.length) return 0;
+  const lls = shapes[shapes.length-1].layer.getLatLngs()[0];
+  // Find longest edge
+  let maxLen=0, bestAngle=0;
+  for(let i=0;i<lls.length;i++){
+    const a=lls[i], b=lls[(i+1)%lls.length];
+    const len=Math.hypot(b.lat-a.lat, b.lng-a.lng);
+    if(len>maxLen){
+      maxLen=len;
+      bestAngle=Math.atan2(b.lng-a.lng, b.lat-a.lat)*180/Math.PI;
+    }
+  }
+  return bestAngle;
+}
+
+// ── Generate grid ─────────────────────────────────────────────
+async function gGenerateStallGrid(count){
+  gClearStallGrid();
+  document.getElementById('stall-gen-pill').style.display='flex';
+  document.getElementById('stall-gen-text').textContent='Placing stalls…';
+
+  // Use map rotation as stall angle if set, else lot's longest edge
+  const angle = _mapBearing || _stallAngle || gGetLotAngle();
+  _stallAngle = angle;
+
+  // Get lot boundary — use last confirmed lot shape
+  const lotShape = shapes.filter(s=>s.type==='polygon').slice(-1)[0];
+
+  let originLat, originLng, maxCols, maxRows;
+
+  if(lotShape){
+    // Get the bounding box of the lot in rotated frame
+    // Rotate all lot vertices by -angle to align with grid, find bbox, use that
+    const lls    = lotShape.layer.getLatLngs()[0];
+    const center = lotShape.layer.getBounds().getCenter();
+    const cLat   = center.lat, cLng = center.lng;
+
+    // Rotate points to axis-aligned frame
+    const rotated = lls.map(ll => {
+      const [rx, ry] = rotPt(cLng, cLat, ll.lng, ll.lat, -angle);
+      return {lng:rx, lat:ry};
+    });
+
+    const minLng = Math.min(...rotated.map(p=>p.lng));
+    const minLat = Math.min(...rotated.map(p=>p.lat));
+    const maxLng = Math.max(...rotated.map(p=>p.lng));
+    const maxLat = Math.max(...rotated.map(p=>p.lat));
+
+    // Width and height in feet
+    const widthFt  = (maxLng - minLng) / FT_TO_DEG_LNG(cLat);
+    const heightFt = (maxLat - minLat) / FT_TO_DEG;
+
+    // How many stalls fit
+    const rowH   = _stallD + AISLE_W;
+    maxCols = Math.max(1, Math.floor(widthFt  / _stallW));
+    maxRows = Math.max(1, Math.floor(heightFt / rowH));
+
+    // Auto-fill: if count > capacity, cap it; update input
+    const capacity = maxCols * maxRows;
+    if(count > capacity){ count = capacity; document.getElementById('stall-count-input').value = count; }
+
+    // Origin: bottom-left corner of lot in rotated frame, rotated back
+    const [origLng, origLat] = rotPt(cLng, cLat, minLng, minLat, angle);
+    originLat = origLat;
+    originLng = origLng;
+
+  } else {
+    // No lot — place at map center, use count to determine grid
+    const c   = map.getCenter();
+    originLat = c.lat;
+    originLng = c.lng;
+    const aspect = _stallW / (_stallD + AISLE_W);
+    maxCols  = Math.max(1, Math.round(Math.sqrt(count * aspect)));
+    maxRows  = Math.ceil(count / maxCols);
+  }
+
+  _stallOrigin = {lat:originLat, lng:originLng};
+
+  // Determine cols/rows from count, capped at maxCols/maxRows
+  const cols = Math.min(maxCols, Math.max(1, Math.round(Math.sqrt(count * (_stallW / (_stallD + AISLE_W))))));
+  const rows = Math.ceil(count / cols);
+
+  // Sweep animation — row by row
+  const totalDelay = Math.min(800, count*12);
+  const rowDelay   = rows > 0 ? totalDelay / rows : 100;
+
+  let placed = 0;
+  for(let r=0; r<rows; r++){
+    await new Promise(res=>setTimeout(res, rowDelay));
+    for(let c=0; c<cols && placed<count; c++, placed++){
+      const lls = stallCellLatLngs(originLat, originLng, r, c, _stallW, _stallD, angle);
+      const poly = L.polygon(lls,{
+        color:G_LOT_COLOR, fillColor:G_LOT_COLOR,
+        weight:1.2, fillOpacity:.18,
+        className:'stall-cell'
+      });
+      poly.on('add', ()=>{
+        if(poly._path) poly._path.style.animation='stall-sweep .25s ease forwards';
+      });
+      poly.addTo(_stallLayer);
+      poly.on('click', ()=>{
+        const cell = _stallCells.find(x=>x.poly===poly);
+        if(!cell) return;
+        cell.dead = !cell.dead;
+        poly.setStyle(cell.dead
+          ? {fillOpacity:.06, color:'#555', fillColor:'#333'}
+          : {fillOpacity:.18, color:G_LOT_COLOR, fillColor:G_LOT_COLOR}
+        );
+        gUpdateStallStats();
+      });
+      _stallCells.push({poly, dead:false, row:r, col:c});
+    }
+    gUpdateStallStats();
+  }
+
+  document.getElementById('stall-gen-pill').style.display='none';
+  gTriggerGlitch(400);
+
+  // Fit map to show lot + grid together
+  const allLayers = [...(lotShape ? [lotShape.layer] : []), ..._stallCells.map(c=>c.poly)];
+  if(allLayers.length){
+    const bounds = allLayers.reduce((b,l)=>b.extend(l.getBounds()), L.latLngBounds(allLayers[0].getBounds()));
+    map.fitBounds(bounds, {padding:[20,160], animate:true});
+  }
+}
+
+// ── Enter stall layout screen ─────────────────────────────────
+document.getElementById('g-btn-layout-stalls').addEventListener('click', ()=>{
+  gScreen('s-stalls-layout');
+
+  // Fit map to lot before generating grid
+  const lotShape = shapes.filter(s=>s.type==='polygon').slice(-1)[0];
+  if(lotShape) map.fitBounds(lotShape.layer.getBounds(), {padding:[40,180], animate:true});
+
+  // Use estimated stall count from results screen
+  const estCount = parseInt(document.getElementById('g-r-stalls').textContent.replace(/,/g,''))||20;
+  document.getElementById('stall-count-input').value = estCount;
+  document.getElementById('stall-size-display').textContent = `${_stallW}×${_stallD}`;
+
+  if(!_stallSizePromptShown){
+    _stallSizePromptShown = true;
+    document.getElementById('stall-size-prompt').style.display    = '';
+    document.getElementById('stall-controls-float').style.display = 'none';
+    gUpdateSspPreview();
+  } else {
+    document.getElementById('stall-size-prompt').style.display    = 'none';
+    document.getElementById('stall-controls-float').style.display = '';
+    gGenerateStallGrid(estCount);
+  }
+});
+
+// ── Stall size prompt controls ────────────────────────────────
+function gUpdateSspPreview(){
+  const ratio = _stallD / _stallW;
+  const boxEl = document.getElementById('ssp-box');
+  boxEl.style.width  = '28px';
+  boxEl.style.height = Math.round(28*ratio)+'px';
+  document.getElementById('ssp-label').textContent =
+    `${_stallW} × ${_stallD} ft  ·  ${_stallW*_stallD} sq ft per stall`;
+}
+
+document.querySelectorAll('.stall-sz-btn[data-w]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.stall-sz-btn[data-w]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    _stallW = parseInt(btn.dataset.w);
+    document.getElementById('stall-size-display').textContent = `${_stallW}×${_stallD}`;
+    gUpdateSspPreview();
+  });
+});
+document.querySelectorAll('.stall-sz-btn[data-d]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.stall-sz-btn[data-d]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    _stallD = parseInt(btn.dataset.d);
+    document.getElementById('stall-size-display').textContent = `${_stallW}×${_stallD}`;
+    gUpdateSspPreview();
+  });
+});
+
+document.getElementById('stall-size-confirm').addEventListener('click', ()=>{
+  document.getElementById('stall-size-prompt').style.display   = 'none';
+  document.getElementById('stall-controls-float').style.display = '';
+  const count = parseInt(document.getElementById('stall-count-input').value)||20;
+  gGenerateStallGrid(count);
+});
+
+// Stall count +/−
+document.getElementById('stall-inc').addEventListener('click', ()=>{
+  const inp = document.getElementById('stall-count-input');
+  inp.value = Math.min(999, (parseInt(inp.value)||0)+1);
+  gGenerateStallGrid(parseInt(inp.value));
+});
+document.getElementById('stall-dec').addEventListener('click', ()=>{
+  const inp = document.getElementById('stall-count-input');
+  inp.value = Math.max(1, (parseInt(inp.value)||0)-1);
+  gGenerateStallGrid(parseInt(inp.value));
+});
+document.getElementById('stall-count-input').addEventListener('change', ()=>{
+  const v = parseInt(document.getElementById('stall-count-input').value)||1;
+  gGenerateStallGrid(v);
+});
+
+// Snap toggle
+document.getElementById('stall-snap-btn').addEventListener('click', ()=>{
+  _stallSnap = !_stallSnap;
+  const btn  = document.getElementById('stall-snap-btn');
+  btn.classList.toggle('active', _stallSnap);
+  btn.textContent = _stallSnap ? '🧲 On' : '🧲 Off';
+  gGenerateStallGrid(parseInt(document.getElementById('stall-count-input').value)||20);
+});
+
+// Rotate CW 5°
+document.getElementById('stall-rotate-cw').addEventListener('click', ()=>{
+  _stallAngle = (_stallAngle + 5) % 360;
+  gGenerateStallGrid(parseInt(document.getElementById('stall-count-input').value)||20);
+});
+
+// Recenter on lot
+document.getElementById('stall-recenter').addEventListener('click', ()=>{
+  _stallOrigin = null;
+  gGenerateStallGrid(parseInt(document.getElementById('stall-count-input').value)||20);
+});
+
+// Change stall size from controls
+document.getElementById('stall-size-change').addEventListener('click', ()=>{
+  document.getElementById('stall-controls-float').style.display = 'none';
+  document.getElementById('stall-size-prompt').style.display    = '';
+  gUpdateSspPreview();
+});
+
+// Confirm layout → go to estimate
+document.getElementById('stall-confirm-btn').addEventListener('click', ()=>{
+  const active = _stallCells.filter(c=>!c.dead).length;
+  showToast(`${active} stalls confirmed`);
+  gTriggerGlitch(350);
+  setTimeout(()=>{ exitGuided(); showTab('tab-paint'); showToast('Layout confirmed — build your estimate'); }, 300);
+});
+
+// ── Two-finger drag to move grid ──────────────────────────────
+// (Single-finger drag on stall layer moves the whole grid)
+let _stallPanStart = null;
+map.on('mousedown touchstart', (e)=>{
+  if(!_stallCells.length) return;
+  // Only activate if s-stalls-layout is active screen
+  if(!document.getElementById('s-stalls-layout').classList.contains('active')) return;
+});
+
+// ── Update results button (now goes to stalls) ────────────────
+// g-btn-get-estimate now skips to estimate directly
+document.getElementById('g-btn-get-estimate').addEventListener('click', ()=>{ exitGuided(); showTab('tab-paint'); showToast('Measurements loaded — build your estimate'); });
+document.getElementById('g-btn-refine-tools').addEventListener('click', ()=>{ exitGuided(); showTab('tab-lot');   showToast('Tap a shape to select · pinch to rotate · tap ▶ Guided to return'); });
+document.getElementById('g-btn-walk').addEventListener('click',         ()=>{ exitGuided(); showTab('tab-lines'); showToast('Walk the lot — GPS traces your path · tap ▶ Guided to return'); });
+function gStartType(){
+  const t = _gTypes[_gTypeIdx];
+  _gSegCount = 0;
+
+  // Sync to expert line type
+  _activeType = t;
+  document.getElementById('lt-width').value = t.widthIn;
+
+  // Update UI
+  document.getElementById('g-type-dot').style.background = t.color;
+  document.getElementById('g-type-name').textContent = t.name;
+  document.getElementById('g-type-w').textContent = t.widthIn+'"';
+  document.getElementById('g-trace-hint').textContent =
+    `Walk along the ${t.name.toLowerCase()} · GPS traces your path`;
+  document.getElementById('g-ts-type').textContent =
+    `${_gTypeIdx+1}/${_gTypes.length}`;
+  const isLast = _gTypeIdx >= _gTypes.length-1;
+  document.getElementById('g-btn-next-type').textContent = isLast ? '✓ Done → Estimate' : 'Next type →';
+
+  // Progress dots
+  const prog = document.getElementById('g-trace-prog');
+  prog.innerHTML = '';
+  _gTypes.forEach((_,i)=>{
+    const d = document.createElement('div');
+    d.className = 'tp-dot' + (i<_gTypeIdx?' done':i===_gTypeIdx?' active':'');
+    prog.appendChild(d);
+  });
+
+  gUpdateTraceStats();
+  gStartGPS();
+}
+
+function gStartGPS(){
+  if(!navigator.geolocation){
+    showToast('GPS not available — use Advanced mode to draw lines manually');
+    return;
+  }
+  _gTracing = true;
+  _gPaused  = false;
+  _gCurrentLine  = [];
+  _gCurrentLayer = null;
+  _gLastPos      = null;
+
+  document.getElementById('g-btn-pause').textContent = '⏸ Pause';
+
+  _gWatchId = navigator.geolocation.watchPosition(
+    gOnGPSUpdate,
+    gOnGPSError,
+    {enableHighAccuracy:true, timeout:10000, maximumAge:2000}
+  );
+}
+
+function gStopGPS(){
+  if(_gWatchId !== null){
+    navigator.geolocation.clearWatch(_gWatchId);
+    _gWatchId = null;
+  }
+  _gTracing = false;
+  gFinishCurrentSegment();
+}
+
+function gOnGPSError(err){
+  const msg = err.code===1
+    ? 'GPS permission denied — enable location in settings'
+    : 'GPS signal lost — move outside or wait';
+  showToast(msg);
+}
+
+function gOnGPSUpdate(pos){
+  const lat = pos.coords.latitude;
+  const lng = pos.coords.longitude;
+  const acc = pos.coords.accuracy; // metres
+
+  // Move GPS dot on map
+  gMoveDot(lat, lng, acc);
+
+  if(!_gTracing || _gPaused) return;
+
+  // Only add a point if we've moved enough
+  if(_gLastPos){
+    const from = turf.point([_gLastPos.lng, _gLastPos.lat]);
+    const to   = turf.point([lng, lat]);
+    const dist = turf.distance(from, to, {units:'meters'});
+    if(dist < GPS_MIN_DIST_M) return;
+  }
+
+  _gLastPos = {lat, lng};
+  _gCurrentLine.push([lat, lng]);
+
+  // Draw / update live polyline
+  const t = _gTypes[_gTypeIdx];
+  if(!_gCurrentLayer){
+    _gCurrentLayer = L.polyline([[lat,lng]], {
+      color:t.color,
+      weight:Math.max(2, t.widthIn/2.5),
+      opacity:0.85,
+      dashArray: t.id==='crosswalk'?'8,6':null
+    }).addTo(linesLayer);
+  } else {
+    _gCurrentLayer.addLatLng([lat,lng]);
+  }
+
+  // Auto-follow map
+  map.panTo([lat,lng], {animate:true, duration:0.5});
+  gUpdateTraceStats();
+}
+
+function gMoveDot(lat, lng, accM){
+  const dot = document.getElementById('gps-dot');
+  const ring = document.getElementById('gps-accuracy');
+  const pt = map.latLngToContainerPoint([lat,lng]);
+  dot.style.left = pt.x + 'px';
+  dot.style.top  = pt.y + 'px';
+  dot.classList.add('active');
+
+  // Accuracy ring size in pixels
+  if(accM && accM < 200){
+    const pxPerM = map.getZoomScale(map.getZoom(), map.getZoom()) *
+                   map.options.crs.scale(map.getZoom()) / 111320;
+    const r = Math.round(accM * pxPerM * map.getZoomScale(map.getZoom()) /
+              (40075016.686 / 360 / Math.cos(lat*Math.PI/180) /
+               Math.pow(2, map.getZoom()) / 256));
+    // Simpler: just use latLngToContainerPoint delta
+    const edgePt = map.latLngToContainerPoint(
+      [lat + accM/111320, lng]
+    );
+    const pxR = Math.max(10, Math.abs(edgePt.y - pt.y));
+    ring.style.width  = (pxR*2)+'px';
+    ring.style.height = (pxR*2)+'px';
+    ring.style.left   = pt.x + 'px';
+    ring.style.top    = pt.y + 'px';
+    ring.classList.add('active');
+  }
+  // Update dot when map pans
+  map.once('move', ()=>{
+    if(_gActive) gRefreshDotPosition(lat, lng, accM);
+  });
+}
+
+function gRefreshDotPosition(lat, lng, accM){
+  const dot = document.getElementById('gps-dot');
+  if(!dot.classList.contains('active')) return;
+  const pt = map.latLngToContainerPoint([lat,lng]);
+  dot.style.left = pt.x+'px';
+  dot.style.top  = pt.y+'px';
+  const ring = document.getElementById('gps-accuracy');
+  if(ring.classList.contains('active')){
+    const edgePt = map.latLngToContainerPoint([lat+accM/111320,lng]);
+    const pxR = Math.max(10,Math.abs(edgePt.y-pt.y));
+    ring.style.width=(pxR*2)+'px';ring.style.height=(pxR*2)+'px';
+    ring.style.left=pt.x+'px';ring.style.top=pt.y+'px';
+  }
+}
+map.on('move zoom', ()=>{
+  // Dots re-render on pan — handled by position tracking
+});
+
+function gFinishCurrentSegment(){
+  if(!_gCurrentLayer) return;
+  if(_gCurrentLine.length < 2){
+    // Too short — remove it
+    linesLayer.removeLayer(_gCurrentLayer);
+    _gCurrentLayer = null;
+    _gCurrentLine  = [];
+    return;
+  }
+  // Commit to paintLines
+  const t       = _gTypes[_gTypeIdx];
+  const widthIn = t.widthIn;
+  const color   = t.color;
+  const lengthM = turf.length(_gCurrentLayer.toGeoJSON(), {units:'meters'});
+  const lengthFt= lengthM * M_FT;
+  const label   = `${t.name} ${_gSegCount+1}`;
+  _gCurrentLayer.setStyle({color,weight:Math.max(2,widthIn/2.5),opacity:0.92,dashArray:t.id==='crosswalk'?'8,6':null});
+  paintLines.push({
+    id:_lineId++, typeId:t.id, typeName:t.name,
+    label, widthIn, lengthFt, color, layer:_gCurrentLayer
+  });
+  _gSegCount++;
+  _gCurrentLayer = null;
+  _gCurrentLine  = [];
+  _gLastPos      = null;
+  refreshLineList(); updateResults(); autoSave();
+  gUpdateTraceStats();
+}
+
+function gUpdateTraceStats(){
+  // Count segments for current type
+  const t   = _gTypes[_gTypeIdx];
+  const segs = paintLines.filter(l=>l.typeId===t?.id).length + (_gCurrentLine?.length>1?0:0);
+  const totalFt = paintLines.reduce((a,l)=>a+l.lengthFt,0);
+  set('g-ts-segs', segs + (_gCurrentLayer?'…':''));
+  set('g-ts-ft',   fmt(totalFt,0));
+}
+
+// Undo last committed segment
+document.getElementById('g-btn-undo').addEventListener('click', ()=>{
+  // First discard any in-progress segment
+  if(_gCurrentLayer){
+    linesLayer.removeLayer(_gCurrentLayer);
+    _gCurrentLayer = null;
+    _gCurrentLine  = [];
+    _gLastPos      = null;
+    showToast('In-progress segment discarded');
+    gUpdateTraceStats();
+    return;
+  }
+  // Otherwise remove last committed segment for this type
+  const t = _gTypes[_gTypeIdx];
+  const idx = paintLines.map(l=>l.typeId).lastIndexOf(t?.id);
+  if(idx === -1){ showToast('Nothing to undo'); return; }
+  const pl = paintLines[idx];
+  linesLayer.removeLayer(pl.layer);
+  paintLines.splice(idx, 1);
+  _lineId = Math.max(0, _lineId-1);
+  _gSegCount = Math.max(0, _gSegCount-1);
+  refreshLineList(); updateResults(); autoSave();
+  gUpdateTraceStats();
+  showToast('Last segment removed');
+});
+
+// Pause / Resume
+document.getElementById('g-btn-pause').addEventListener('click', ()=>{
+  if(!_gTracing) return;
+  if(_gPaused){
+    _gPaused = false;
+    _gLastPos = null;
+    document.getElementById('g-btn-pause').textContent = '⏸ Pause';
+    showToast('Resumed — walk to continue tracing');
+  } else {
+    _gPaused = true;
+    gFinishCurrentSegment();
+    document.getElementById('g-btn-pause').textContent = '▶ Resume';
+    showToast('Paused · tap Resume to start a new segment');
+  }
+});
+
+// Finish this line segment manually
+document.getElementById('g-btn-finish-line').addEventListener('click', ()=>{
+  gFinishCurrentSegment();
+  _gLastPos = null;
+  showToast('Segment saved · keep walking or tap Next type');
+});
+
+// Advance to next type
+document.getElementById('g-btn-next-type').addEventListener('click', ()=>{
+  gStopGPS();
+  _gTypeIdx++;
+  if(_gTypeIdx < _gTypes.length){
+    gStartType();
+  } else {
+    gScreen('s-estimate');
+    gBuildEstimate();
+  }
+});
+
+// ── STEP 4: Estimate ──────────────────────────────────────────
+function gBuildEstimate(){
+  const cov   = parseFloat(document.getElementById('coverage-rate').value)||320;
+  const waste = parseFloat(document.getElementById('waste-pct').value)||10;
+  const coats = parseFloat(document.getElementById('num-coats').value)||1;
+
+  const byType = getTracedByType();
+  const totalFt= getTotalTracedFt();
+  let totalGal = 0, paintCostEst = 0;
+
+  const bd = document.getElementById('g-est-bkd');
+  bd.innerHTML = '';
+
+  byType.forEach(g=>{
+    const r = calcPaint(g.ft, g.widthIn, cov, waste, coats);
+    totalGal   += r.totalGallons;
+    paintCostEst += r.totalGallons * 38; // ~$38/gal average
+    const row = document.createElement('div');
+    row.className = 'est-row';
+    row.innerHTML = `
+      <div class="est-sw" style="background:${g.color}"></div>
+      <div class="est-rname">${g.name} · ${g.widthIn}"</div>
+      <div class="est-rft">${fmt(g.ft,0)} ft</div>
+      <div class="est-rgal">${fmt(r.totalGallons,2)} gal</div>`;
+    bd.appendChild(row);
+  });
+
+  set('g-est-gal', fmt(totalGal,1));
+  set('g-est-ft',  fmt(totalFt,0));
+
+  function recalc(){
+    const rate = parseFloat(document.getElementById('g-labour-rate').value)||65;
+    const hrs  = parseFloat(document.getElementById('g-labour-hrs').value)||8;
+    set('g-est-total', '$'+fmt(paintCostEst + rate*hrs, 0));
+  }
+  recalc();
+  document.getElementById('g-labour-rate').addEventListener('input', recalc);
+  document.getElementById('g-labour-hrs').addEventListener('input', recalc);
+}
+
+// ── STEP 5: Export ────────────────────────────────────────────
+document.getElementById('g-btn-export').addEventListener('click', ()=>{
+  // Reuse expert export
+  document.getElementById('export-btn').click();
+});
+
+document.getElementById('g-btn-restart').addEventListener('click', ()=>{
+  if(!confirm('Start a new job? All current data will be cleared.')) return;
+  cancelAllModes();
+  gStopGPS();
+  drawnItems.clearLayers(); stallLayer.clearLayers(); linesLayer.clearLayers();
+  shapes=[]; stallRows=[]; paintLines=[];
+  _shapeId=0; _stallId=0; _lineId=0; _colorIdx=0;
+  localStorage.removeItem('plot_v1');
+  refreshShapeList(); refreshStallList(); refreshLineList(); updateResults();
+  document.getElementById('gps-dot').classList.remove('active');
+  document.getElementById('gps-accuracy').classList.remove('active');
+  enterGuided();
+  showToast('New job started');
+});
+</script>
+</body>
+</html>
