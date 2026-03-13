@@ -1,0 +1,3263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Lost</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --primary: #1a73e8;
+    --primary-dark: #1558b0;
+    --surface: #ffffff;
+    --surface-2: #f8f9fa;
+    --surface-3: #f1f3f4;
+    --on-surface: #202124;
+    --on-surface-2: #5f6368;
+    --on-surface-3: #9aa0a6;
+    --error: #d93025;
+    --error-bg: #fce8e6;
+    --error-border: #f28b82;
+    --divider: #e8eaed;
+    --shadow-1: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+    --shadow-2: 0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15);
+    --shadow-3: 0 4px 8px rgba(60,64,67,.3), 0 6px 12px 6px rgba(60,64,67,.15);
+    --ripple: rgba(60,64,67,.12);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-full: 999px;
+  }
+
+  html, body {
+    height: 100%;
+    font-family: 'Roboto', sans-serif;
+
+    background: #e8eaed;
+    color: var(--on-surface);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* ─── Device Shell ─── */
+  .device {
+    width: 100%;
+    max-width: 390px;
+    height: 100%;
+    max-height: 844px;
+    margin: 0 auto;
+    background: var(--surface-2);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-3);
+  }
+
+  @media (min-height: 900px) {
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .device { border-radius: 40px; }
+  }
+
+  /* ─── Status Bar ─── */
+  .status-bar {
+    background: var(--primary);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px 4px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: .3px;
+    flex-shrink: 0;
+    height: 28px;
+  }
+
+  .status-bar .time { font-weight: 700; font-size: 12px; }
+  .status-icons { display: flex; align-items: center; gap: 4px; }
+  .status-icons .material-icons { font-size: 14px; }
+
+  /* ─── App Bar ─── */
+  .app-bar {
+    background: var(--primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    padding: 0 4px 0 4px;
+    height: 56px;
+    flex-shrink: 0;
+    box-shadow: var(--shadow-1);
+    position: relative;
+    z-index: 10;
+  }
+
+  .app-bar-title {
+    flex: 1;
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: .25px;
+    text-align: center;
+    user-select: none;
+  }
+
+  .icon-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .15s;
+  }
+
+  .icon-btn:hover { background: rgba(255,255,255,.12); }
+  .icon-btn .material-icons { font-size: 24px; }
+
+  /* ─── Ripple ─── */
+  .ripple-effect {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,255,255,.35);
+    transform: scale(0);
+    animation: ripple-anim .45s linear;
+    pointer-events: none;
+  }
+
+  @keyframes ripple-anim {
+    to { transform: scale(4); opacity: 0; }
+  }
+
+  .card-ripple {
+    background: rgba(60,64,67,.12);
+  }
+
+  /* ─── Screen Container ─── */
+  .screens {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s;
+  }
+
+  .screen.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* ─── Home Screen ─── */
+  .home-content {
+    padding: 12px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Error Banner */
+  .error-banner {
+    background: var(--error-bg);
+    border: 1px solid var(--error-border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    box-shadow: var(--shadow-1);
+  }
+
+  .error-banner .material-icons {
+    color: var(--error);
+    font-size: 20px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .error-banner-text { flex: 1; }
+
+  .error-banner-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--error);
+    letter-spacing: .1px;
+    margin-bottom: 3px;
+  }
+
+  .error-banner-body {
+    font-size: 12px;
+    color: #8c1d0f;
+    line-height: 1.5;
+  }
+
+  .error-banner-body strong {
+    font-weight: 700;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 11px;
+    background: rgba(217,48,37,.08);
+    padding: 0 3px;
+    border-radius: 3px;
+  }
+
+  /* Search Bar */
+  .search-bar {
+    background: var(--surface);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    box-shadow: var(--shadow-1);
+    cursor: default;
+  }
+
+  .search-bar .material-icons { color: var(--on-surface-2); font-size: 20px; }
+
+  .search-placeholder {
+    font-size: 15px;
+    color: var(--on-surface-3);
+    user-select: none;
+    flex: 1;
+  }
+
+  /* Section Label */
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--on-surface-2);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    padding: 4px 2px 0;
+  }
+
+  /* Content Cards */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: var(--shadow-1);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    transition: box-shadow .15s;
+  }
+
+  .card:active { box-shadow: var(--shadow-2); }
+
+  .card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .card-icon .material-icons { font-size: 22px; }
+  .card-icon.blue { background: #e8f0fe; color: #1a73e8; }
+  .card-icon.green { background: #e6f4ea; color: #188038; }
+  .card-icon.amber { background: #fef7e0; color: #f29900; }
+
+  .card-text { flex: 1; min-width: 0; }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--on-surface);
+    margin-bottom: 3px;
+    letter-spacing: .1px;
+  }
+
+  .card-subtitle {
+    font-size: 12px;
+    color: var(--on-surface-2);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-meta {
+    font-size: 11px;
+    color: var(--on-surface-3);
+    white-space: nowrap;
+  }
+
+  .card-badge {
+    background: var(--primary);
+    color: white;
+    border-radius: var(--radius-full);
+    font-size: 11px;
+    font-weight: 700;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ─── Tasks Screen ─── */
+  .tasks-content { padding: 12px 16px; }
+
+  .task-item {
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: var(--shadow-1);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .task-check {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--on-surface-3);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .2s;
+  }
+
+  .task-item.done .task-check {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+
+  .task-item.done .task-check .material-icons {
+    font-size: 14px;
+    color: white;
+  }
+
+  .task-item.done .task-text {
+    text-decoration: line-through;
+    color: var(--on-surface-3);
+  }
+
+  .task-text { font-size: 14px; color: var(--on-surface); flex: 1; }
+  .task-due { font-size: 11px; color: var(--on-surface-3); }
+
+  .fab {
+    position: absolute;
+    bottom: 20px;
+    right: 16px;
+    width: 56px;
+    height: 56px;
+    background: var(--primary);
+    color: white;
+    border-radius: 16px;
+    border: none;
+    box-shadow: var(--shadow-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    position: sticky;
+    bottom: 16px;
+    margin-left: auto;
+    margin-top: 16px;
+    overflow: hidden;
+  }
+
+  .fab .material-icons { font-size: 24px; }
+
+  /* ─── Notes Screen ─── */
+  .notes-grid {
+    padding: 12px 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .note-card {
+    border-radius: var(--radius-sm);
+    padding: 14px 12px;
+    min-height: 110px;
+    box-shadow: var(--shadow-1);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .note-card.yellow { background: #fff9c4; }
+  .note-card.green { background: #ccff90; }
+  .note-card.pink { background: #ffd6e0; }
+  .note-card.blue { background: #bbdefb; }
+  .note-card.white { background: var(--surface); }
+  .note-card.peach { background: #ffe0b2; }
+
+  .note-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--on-surface);
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+
+  .note-body {
+    font-size: 12px;
+    color: var(--on-surface-2);
+    line-height: 1.5;
+  }
+
+  .note-date {
+    font-size: 10px;
+    color: var(--on-surface-3);
+    position: absolute;
+    bottom: 8px;
+    right: 10px;
+  }
+
+  /* ─── Profile Screen ─── */
+  .profile-header {
+    background: var(--primary);
+    padding: 24px 16px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255,255,255,.5);
+  }
+
+  .avatar .material-icons { font-size: 40px; color: white; }
+  .profile-name { font-size: 18px; font-weight: 500; color: white; }
+  .profile-email { font-size: 13px; color: rgba(255,255,255,.75); }
+
+  .profile-content { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+
+  .list-item {
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: var(--shadow-1);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .list-item .material-icons:first-child { color: var(--on-surface-2); font-size: 22px; }
+  .list-item-text { flex: 1; }
+  .list-item-title { font-size: 14px; color: var(--on-surface); }
+  .list-item-sub { font-size: 12px; color: var(--on-surface-2); margin-top: 2px; }
+  .list-item .material-icons.chevron { color: var(--on-surface-3); font-size: 20px; }
+
+  /* ─── Settings Screen ─── */
+  .settings-content { padding: 8px 0; }
+
+  .settings-section-header {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 16px 16px 6px;
+  }
+
+  .settings-item {
+    background: var(--surface);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid var(--divider);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .settings-item:first-of-type { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+  .settings-item:last-of-type { border-bottom: none; border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+
+  .settings-item .material-icons { color: var(--on-surface-2); font-size: 22px; flex-shrink: 0; }
+  .settings-item-text { flex: 1; }
+  .settings-item-title { font-size: 14px; color: var(--on-surface); }
+  .settings-item-sub { font-size: 12px; color: var(--on-surface-2); margin-top: 2px; }
+
+  /* Toggle */
+  .toggle {
+    width: 48px;
+    height: 26px;
+    background: var(--on-surface-3);
+    border-radius: 13px;
+    position: relative;
+    cursor: pointer;
+    transition: background .2s;
+    flex-shrink: 0;
+  }
+
+  .toggle.on { background: var(--primary); }
+
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    transition: left .2s;
+  }
+
+  .toggle.on::after { left: 25px; }
+
+  /* Settings Group */
+  .settings-group {
+    background: var(--surface);
+    margin: 0 12px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    box-shadow: var(--shadow-1);
+    margin-bottom: 4px;
+  }
+
+  /* Reset Section */
+  .settings-danger-group {
+    background: var(--surface);
+    margin: 0 12px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    box-shadow: var(--shadow-1);
+    margin-bottom: 4px;
+  }
+
+  .settings-item.danger .settings-item-title { color: var(--error); }
+  .settings-item.danger .material-icons { color: var(--error); }
+
+  /* Version */
+  .settings-version {
+    text-align: center;
+    font-size: 11px;
+    color: var(--on-surface-3);
+    padding: 20px 16px 8px;
+    font-family: 'Roboto Mono', monospace;
+  }
+
+  /* ─── Reset Progress Overlay ─── */
+  .reset-overlay {
+    position: absolute;
+    inset: 0;
+    background: var(--surface);
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 40px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s;
+  }
+
+  .reset-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .reset-overlay-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--on-surface);
+    letter-spacing: .15px;
+  }
+
+  .reset-overlay-sub {
+    font-size: 12px;
+    color: var(--on-surface-2);
+    margin-top: -16px;
+    text-align: center;
+    line-height: 1.5;
+    min-height: 36px;
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 4px;
+    background: var(--surface-3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--primary);
+    border-radius: 2px;
+    transition: width .12s linear;
+  }
+
+  .progress-bar.error { background: var(--error); }
+
+  .reset-error-box {
+    background: var(--error-bg);
+    border: 1px solid var(--error-border);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    width: 100%;
+    display: none;
+  }
+
+  .reset-error-box.visible { display: block; }
+
+  .reset-error-code {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 12px;
+    color: var(--error);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .reset-error-msg {
+    font-size: 12px;
+    color: #8c1d0f;
+    line-height: 1.5;
+  }
+
+  .reset-dismiss-btn {
+    background: transparent;
+    border: 1px solid var(--on-surface-3);
+    border-radius: var(--radius-full);
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--on-surface-2);
+    cursor: pointer;
+    font-family: 'Roboto', sans-serif;
+    display: none;
+    letter-spacing: .4px;
+  }
+
+  .reset-dismiss-btn.visible { display: block; }
+
+  /* ─── Void Screen ─── */
+  .void-screen {
+    position: absolute;
+    inset: 0;
+    background: #000;
+    z-index: 400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .4s;
+  }
+
+  .void-screen.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .void-cursor {
+    width: 10px;
+    height: 18px;
+    background: #33ff33;
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* ─── Redacted Button ─── */
+  .settings-item.redacted {
+    background: #1a1a1a;
+    border-bottom-color: #333;
+  }
+
+  .settings-item.redacted .settings-item-title {
+    font-family: 'Roboto Mono', monospace;
+    color: #33ff33;
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+
+  .settings-item.redacted .material-icons {
+    color: #33ff33;
+  }
+
+
+  /* ─── Manual Overlay ─── */
+  .manual-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 250;
+    display: flex;
+    align-items: flex-end;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s;
+  }
+
+  .manual-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .manual-overlay .manual-screen {
+    width: 100%;
+    max-height: 88%;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: var(--shadow-3);
+  }
+
+  .manual-overlay .manual-body {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  /* ─── User Manual ─── */
+  .manual-screen {
+    background: var(--surface);
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .manual-header {
+    background: var(--surface-3);
+    border-bottom: 1px solid var(--divider);
+    padding: 16px 20px 14px;
+  }
+
+  .manual-header-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--on-surface-3);
+    margin-bottom: 4px;
+  }
+
+  .manual-header-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--on-surface);
+  }
+
+  .manual-header-sub {
+    font-size: 12px;
+    color: var(--on-surface-2);
+    margin-top: 3px;
+  }
+
+  .manual-body {
+    flex: 1;
+    padding: 24px 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .manual-page-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--on-surface-3);
+  }
+
+  .manual-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--on-surface);
+    line-height: 1.3;
+  }
+
+  .manual-divider { height: 1px; background: var(--divider); }
+
+  .manual-text {
+    font-size: 14px;
+    color: var(--on-surface-2);
+    line-height: 1.75;
+  }
+
+  .manual-text p { margin-bottom: 12px; }
+  .manual-text p:last-child { margin-bottom: 0; }
+
+  .manual-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--divider);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .manual-btn {
+    padding: 10px 20px;
+    border-radius: var(--radius-full);
+    border: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: 'Roboto', sans-serif;
+    letter-spacing: .3px;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .15s;
+  }
+
+  .manual-btn.secondary { background: transparent; color: var(--on-surface-2); }
+  .manual-btn.secondary:hover { background: var(--surface-3); }
+  .manual-btn.primary { background: var(--primary); color: white; }
+  .manual-btn.primary:hover { background: var(--primary-dark); }
+
+  .manual-page-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    padding: 0;
+  }
+
+  .manual-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--divider);
+    transition: background .2s;
+  }
+
+  .manual-dot.active { background: var(--primary); }
+
+
+  /* ─── Dark Mode Glitch ─── */
+  .device.inverted { filter: invert(1) hue-rotate(180deg); }
+
+  .clue-flash {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .15s;
+  }
+
+  .clue-flash.show { opacity: 1; }
+
+  .clue-char {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 96px;
+    font-weight: 700;
+    color: #ff0000;
+    text-shadow: 0 0 30px #ff000099;
+    filter: invert(1) hue-rotate(180deg);
+    letter-spacing: -2px;
+    user-select: none;
+  }
+
+
+  /* ─── Manual Font Scaling ─── */
+  #screen-manual .manual-body,
+  #screen-manual .manual-title,
+  #screen-manual .manual-text,
+  #screen-manual .manual-page-label {
+    transition: font-size .3s ease;
+  }
+
+  /* ─── Terminal Panel ─── */
+  .terminal-overlay {
+    position: absolute;
+    inset: 0;
+    background: #0d0d0d;
+    z-index: 350;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s;
+  }
+
+  .terminal-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .terminal-bar {
+    background: #1a1a1a;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #2a2a2a;
+    flex-shrink: 0;
+  }
+
+  .terminal-bar-title {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 12px;
+    color: #33ff33;
+    letter-spacing: 1px;
+  }
+
+  .terminal-close {
+    background: transparent;
+    border: none;
+    color: #666;
+    font-size: 13px;
+    font-family: 'Roboto Mono', monospace;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    letter-spacing: 1px;
+  }
+
+  .terminal-close:hover { color: #33ff33; }
+
+  .terminal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    font-family: 'Roboto Mono', monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    color: #888;
+  }
+
+  .terminal-line { margin-bottom: 2px; }
+  .terminal-line.error { color: #ff4444; }
+  .terminal-line.warn { color: #ffaa00; }
+  .terminal-line.info { color: #33ff33; }
+  .terminal-line.dim { color: #444; }
+
+  .terminal-cursor-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    color: #33ff33;
+  }
+
+  .terminal-prompt { color: #33ff33; }
+
+  .terminal-input-cursor {
+    width: 7px;
+    height: 13px;
+    background: #33ff33;
+    animation: blink 1s step-end infinite;
+    display: inline-block;
+  }
+
+  /* Error log link in manual */
+  .error-log-link {
+    display: inline-block;
+    margin-top: 12px;
+    font-size: 12px;
+    font-family: 'Roboto Mono', monospace;
+    color: #33ff33;
+    background: #1a1a1a;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid #2a2a2a;
+    text-decoration: none;
+    transition: background .15s;
+  }
+
+  .error-log-link:hover { background: #222; }
+
+  .error-log-link.disabled {
+    color: #444;
+    border-color: #1a1a1a;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+
+  /* ─── About Screen ─── */
+  .about-header {
+    background: var(--primary);
+    padding: 28px 20px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .about-app-icon {
+    width: 64px;
+    height: 64px;
+    background: rgba(255,255,255,.2);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+  }
+
+  .about-app-icon .material-icons { font-size: 36px; color: white; }
+  .about-app-name { font-size: 22px; font-weight: 700; color: white; letter-spacing: .2px; }
+  .about-app-tagline { font-size: 13px; color: rgba(255,255,255,.7); }
+
+  .about-body {
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .about-loading-label {
+    font-size: 13px;
+    color: var(--on-surface-3);
+    letter-spacing: .3px;
+  }
+
+  .about-spinner-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 0;
+  }
+
+  .about-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--divider);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: about-spin 1s linear infinite;
+  }
+
+  @keyframes about-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .about-spinner.reverse {
+    animation-direction: reverse;
+    border-top-color: transparent;
+    border-bottom-color: var(--primary);
+  }
+
+  .about-status {
+    font-size: 12px;
+    color: var(--on-surface-3);
+    font-family: 'Roboto Mono', monospace;
+    min-height: 18px;
+    text-align: center;
+    transition: opacity .3s;
+  }
+
+  .about-meta {
+    width: 100%;
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-1);
+    overflow: hidden;
+  }
+
+  .about-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--divider);
+    font-size: 13px;
+  }
+
+  .about-meta-row:last-child { border-bottom: none; }
+  .about-meta-key { color: var(--on-surface-2); }
+  .about-meta-val { color: var(--on-surface); font-weight: 500; font-family: 'Roboto Mono', monospace; font-size: 12px; }
+
+
+  /* ─── Survey Overlay ─── */
+  .survey-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 9998;
+    display: flex;
+    align-items: flex-end;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s;
+  }
+
+  .survey-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .survey-sheet {
+    width: 100%;
+    max-width: 390px;
+    margin: 0 auto;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    padding: 0 0 24px;
+    max-height: 92vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-3);
+  }
+
+  .survey-header {
+    padding: 20px 20px 12px;
+    border-bottom: 1px solid var(--divider);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .survey-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--on-surface);
+  }
+
+  .survey-close {
+    background: transparent;
+    border: none;
+    color: var(--on-surface-3);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 2px 6px;
+    font-family: inherit;
+    line-height: 1;
+  }
+
+  .survey-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .survey-question {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .survey-q-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--on-surface);
+    line-height: 1.4;
+  }
+
+  .survey-q-sub {
+    font-size: 11px;
+    color: var(--on-surface-3);
+    margin-top: -4px;
+  }
+
+  .survey-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .survey-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--divider);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--on-surface-2);
+    transition: all .15s;
+    background: var(--surface);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .survey-option.selected {
+    border-color: var(--primary);
+    background: #e8f0fe;
+    color: var(--primary);
+  }
+
+  .survey-option-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--on-surface-3);
+    flex-shrink: 0;
+    transition: all .15s;
+  }
+
+  .survey-option.selected .survey-option-dot {
+    border-color: var(--primary);
+    background: var(--primary);
+  }
+
+  .survey-textarea {
+    width: 100%;
+    border: 1px solid var(--divider);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--on-surface);
+    resize: none;
+    height: 80px;
+    outline: none;
+    transition: border-color .15s;
+  }
+
+  .survey-textarea:focus { border-color: var(--primary); }
+
+  .survey-footer {
+    padding: 0 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .survey-submit {
+    width: 100%;
+    padding: 14px;
+    border-radius: var(--radius-full);
+    border: none;
+    background: var(--primary);
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: .3px;
+    transition: all .3s;
+  }
+
+  .survey-submit:disabled {
+    background: var(--divider);
+    color: var(--on-surface-3);
+    cursor: not-allowed;
+  }
+
+  .survey-submit-note {
+    font-size: 11px;
+    color: var(--on-surface-3);
+    text-align: center;
+    min-height: 16px;
+    transition: opacity .3s;
+  }
+
+
+  /* ─── Secret Note Modal ─── */
+  .note-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    z-index: 9997;
+    display: flex;
+    align-items: flex-end;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s;
+  }
+
+  .note-modal-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .note-modal {
+    width: 100%;
+    max-width: 390px;
+    margin: 0 auto;
+    background: #bbdefb;
+    border-radius: 20px 20px 0 0;
+    padding: 24px 20px 36px;
+    box-shadow: var(--shadow-3);
+  }
+
+  .note-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+
+  .note-modal-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--on-surface);
+  }
+
+  .note-modal-date {
+    font-size: 11px;
+    color: var(--on-surface-3);
+  }
+
+  .note-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--on-surface-3);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 0 4px;
+    font-family: inherit;
+    line-height: 1;
+  }
+
+  .note-modal-body {
+    font-size: 14px;
+    color: var(--on-surface);
+    line-height: 1.75;
+  }
+
+  .note-modal-counter {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(0,0,0,.1);
+    font-size: 13px;
+    color: var(--on-surface-2);
+  }
+
+  .note-modal-counter-val {
+    font-weight: 700;
+    color: var(--primary);
+    font-family: 'Roboto Mono', monospace;
+    font-size: 15px;
+  }
+
+  /* ─── Bottom Nav ─── */
+  .bottom-nav {
+    background: var(--surface);
+    display: flex;
+    border-top: 1px solid var(--divider);
+    flex-shrink: 0;
+    height: 60px;
+    box-shadow: 0 -1px 3px rgba(60,64,67,.15);
+  }
+
+  .nav-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--on-surface-3);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .4px;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+    overflow: hidden;
+    transition: color .15s;
+    padding: 8px 4px;
+    font-family: 'Roboto', sans-serif;
+  }
+
+  .nav-tab.active { color: var(--primary); }
+  .nav-tab .material-icons { font-size: 22px; }
+
+  .nav-indicator {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 64px;
+    height: 3px;
+    background: var(--primary);
+    border-radius: 0 0 3px 3px;
+    opacity: 0;
+    transition: opacity .15s;
+  }
+
+  .nav-tab.active .nav-indicator { opacity: 1; }
+
+  /* ─── Side Drawer ─── */
+  .drawer-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s;
+    z-index: 100;
+  }
+
+  .drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+  .drawer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 80%;
+    max-width: 300px;
+    background: var(--surface);
+    transform: translateX(-100%);
+    transition: transform .25s cubic-bezier(.4,0,.2,1);
+    z-index: 101;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .drawer-overlay.open .drawer { transform: translateX(0); }
+
+  .drawer-header {
+    background: var(--primary);
+    padding: 28px 16px 16px;
+    flex-shrink: 0;
+  }
+
+  .drawer-app-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(255,255,255,.2);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+
+  .drawer-app-icon .material-icons { color: white; font-size: 28px; }
+  .drawer-app-name { font-size: 18px; font-weight: 500; color: white; }
+  .drawer-app-version { font-size: 12px; color: rgba(255,255,255,.65); margin-top: 2px; }
+
+  .drawer-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    font-size: 14px;
+    color: var(--on-surface-2);
+    cursor: pointer;
+    font-weight: 500;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    border: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    font-family: 'Roboto', sans-serif;
+    border-radius: var(--radius-sm);
+    margin: 2px 8px;
+    width: calc(100% - 16px);
+  }
+
+  .drawer-nav-item.active {
+    background: #e8f0fe;
+    color: var(--primary);
+  }
+
+  .drawer-nav-item .material-icons { font-size: 22px; }
+  .drawer-divider { height: 1px; background: var(--divider); margin: 8px 0; }
+
+  /* ─── Snackbar ─── */
+  .snackbar {
+    position: absolute;
+    bottom: 76px;
+    left: 16px;
+    right: 16px;
+    background: #323232;
+    color: white;
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow-2);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all .25s cubic-bezier(.4,0,.2,1);
+    z-index: 50;
+    pointer-events: none;
+  }
+
+  .snackbar.show { transform: translateY(0); opacity: 1; pointer-events: all; }
+  .snackbar-action { color: #8ab4f8; font-weight: 700; font-size: 13px; cursor: pointer; padding-left: 16px; white-space: nowrap; }
+
+  /* ─── Dialog ─── */
+  .dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s;
+    z-index: 9999;
+    padding: 24px;
+  }
+
+  .dialog-overlay.open { opacity: 1; pointer-events: all; }
+
+  .dialog {
+    background: var(--surface);
+    border-radius: 20px;
+    padding: 24px;
+    width: 100%;
+    max-width: 320px;
+    box-shadow: var(--shadow-3);
+    transform: scale(.92);
+    transition: transform .2s cubic-bezier(.34,1.56,.64,1);
+  }
+
+  .dialog-overlay.open .dialog { transform: scale(1); }
+
+  .dialog-title { font-size: 18px; font-weight: 700; color: var(--on-surface); margin-bottom: 10px; }
+  .dialog-body { font-size: 14px; color: var(--on-surface-2); line-height: 1.55; margin-bottom: 20px; }
+
+  .dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  .dialog-btn {
+    padding: 10px 16px;
+    border-radius: var(--radius-full);
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Roboto', sans-serif;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    letter-spacing: .4px;
+  }
+
+  .dialog-btn.text { background: transparent; color: var(--primary); }
+  .dialog-btn.text:hover { background: rgba(26,115,232,.08); }
+  .dialog-btn.filled { background: var(--error); color: white; }
+  .dialog-btn.filled:hover { background: #b5261e; }
+
+</style>
+</head>
+<body>
+
+<div class="device">
+
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <span class="time" id="status-time">9:41</span>
+    <div class="status-icons">
+      <span class="material-icons">signal_cellular_alt</span>
+      <span class="material-icons">wifi</span>
+      <span class="material-icons">battery_std</span>
+    </div>
+  </div>
+
+  <!-- App Bar -->
+  <div class="app-bar">
+    <button class="icon-btn" id="hamburger-btn" onclick="openDrawer()">
+      <span class="material-icons">menu</span>
+    </button>
+    <div class="app-bar-title">Lost</div>
+    <button class="icon-btn" id="settings-gear-btn" style="opacity:0.35;pointer-events:none;" onmousedown="startSettingsHold()" ontouchstart="startSettingsHold()" onmouseup="cancelSettingsHold()" ontouchend="cancelSettingsHold()" onmouseleave="cancelSettingsHold()">
+      <span class="material-icons">settings</span>
+    </button>
+  </div>
+
+  <!-- Screens -->
+  <div class="screens">
+
+    <!-- HOME -->
+    <div class="screen active" id="screen-home">
+      <div class="home-content">
+
+        <!-- Error Banner -->
+        <div class="error-banner">
+          <span class="material-icons">error</span>
+          <div class="error-banner-text">
+            <div class="error-banner-title">Critical Error Detected</div>
+            <div class="error-banner-body">
+              App data may be corrupted. To fix this, go to
+              <strong>Settings → Reset</strong> or
+              <strong>Delete App</strong>.
+            </div>
+          </div>
+        </div>
+
+        <!-- Search -->
+        <div class="search-bar">
+          <span class="material-icons">search</span>
+          <span class="search-placeholder">Search tasks, notes…</span>
+        </div>
+
+        <div class="section-label">Recents</div>
+
+        <!-- Cards -->
+        <div class="card" onclick="ripple(event, this); showSnack('Opening Quick Tasks…')">
+          <div class="card-icon blue">
+            <span class="material-icons">check_circle_outline</span>
+          </div>
+          <div class="card-text">
+            <div class="card-title">Quick Tasks</div>
+            <div class="card-subtitle">3 pending · 1 overdue</div>
+          </div>
+          <div class="card-badge">3</div>
+        </div>
+
+        <div class="card" onclick="ripple(event, this); showSnack('Opening Recent Notes…')">
+          <div class="card-icon green">
+            <span class="material-icons">note_alt</span>
+          </div>
+          <div class="card-text">
+            <div class="card-title">Recent Notes</div>
+            <div class="card-subtitle">Last edited: Today, 8:14 AM</div>
+          </div>
+          <span class="material-icons" style="color:var(--on-surface-3);font-size:20px">chevron_right</span>
+        </div>
+
+        <div class="card" onclick="ripple(event, this); showSnack('Opening Daily Goal…')">
+          <div class="card-icon amber">
+            <span class="material-icons">emoji_events</span>
+          </div>
+          <div class="card-text">
+            <div class="card-title">Daily Goal</div>
+            <div class="card-subtitle">Focus: Deep work · 4 hrs</div>
+          </div>
+          <div class="card-meta">62%</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TASKS -->
+    <div class="screen" id="screen-tasks">
+      <div class="tasks-content">
+        <div style="padding:8px 0 12px; font-size:13px; color:var(--on-surface-2)">3 pending tasks</div>
+
+        <div class="task-item" onclick="ripple(event, this)">
+          <div class="task-check"></div>
+          <div class="task-text">Review project brief</div>
+          <div class="task-due">Today</div>
+        </div>
+
+        <div class="task-item" onclick="ripple(event, this)">
+          <div class="task-check"></div>
+          <div class="task-text">Send weekly update</div>
+          <div class="task-due">Tomorrow</div>
+        </div>
+
+        <div class="task-item done" onclick="ripple(event, this)">
+          <div class="task-check"><span class="material-icons">check</span></div>
+          <div class="task-text">Set up notifications</div>
+          <div class="task-due">Done</div>
+        </div>
+
+        <div class="task-item" onclick="ripple(event, this)" style="border: 1px solid var(--error-border); background: var(--error-bg);">
+          <div class="task-check" style="border-color: var(--error)"></div>
+          <div class="task-text" style="color:var(--error)">Fix app error (overdue)</div>
+          <div class="task-due" style="color:var(--error)">3 days ago</div>
+        </div>
+
+        <div class="fab" onclick="ripple(event, this); showSnack('Feature unavailable — see error.')">
+          <span class="material-icons">add</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOTES -->
+    <div class="screen" id="screen-notes">
+      <div class="notes-grid">
+
+        <div class="note-card yellow" onclick="ripple(event, this); showSnack('Note opened.')">
+          <div class="note-title">Grocery list</div>
+          <div class="note-body">Milk, eggs, bread, oat flour, coffee—</div>
+          <div class="note-date">Today</div>
+        </div>
+
+        <div class="note-card green" onclick="ripple(event, this); showSnack('Note opened.')">
+          <div class="note-title">Ideas</div>
+          <div class="note-body">Morning routine changes. Bike to work Tues/Thurs.</div>
+          <div class="note-date">Yesterday</div>
+        </div>
+
+        <div class="note-card pink" onclick="ripple(event, this); showSnack('Note opened.')">
+          <div class="note-title">Book recs</div>
+          <div class="note-body">Ask Maya about the one she mentioned Monday.</div>
+          <div class="note-date">Mar 8</div>
+        </div>
+
+        <div class="note-card blue" id="secret-note" onclick="ripple(event, this); openSecretNote()">
+          <div class="note-title">App issues</div>
+          <div class="note-body">This app has serious bugs. Settings locked.</div>
+          <div class="note-date">Mar 2</div>
+        </div>
+
+        <div class="note-card white" onclick="ripple(event, this); showSnack('Note opened.')" style="box-shadow: var(--shadow-1)">
+          <div class="note-title">Passwords</div>
+          <div class="note-body" style="color:var(--on-surface-3); font-style:italic">Encrypted. Unlock to view.</div>
+          <div class="note-date">Feb 28</div>
+        </div>
+
+        <div class="note-card peach" onclick="ripple(event, this); showSnack('Note opened.')">
+          <div class="note-title">Weekend plan</div>
+          <div class="note-body">Hike Saturday. Brunch Sunday if weather.</div>
+          <div class="note-date">Feb 25</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- PROFILE -->
+    <div class="screen" id="screen-profile">
+      <div class="profile-header">
+        <div class="avatar"><span class="material-icons">person</span></div>
+        <div class="profile-name">Alex M.</div>
+        <div class="profile-email"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="2e4f424b5600436e4b434f4742004d4143">[email&#160;protected]</a></div>
+      </div>
+      <div class="profile-content">
+        <div class="list-item" onclick="ripple(event, this); showSnack('Opening account details…')">
+          <span class="material-icons">manage_accounts</span>
+          <div class="list-item-text">
+            <div class="list-item-title">Account Details</div>
+            <div class="list-item-sub">Manage profile, email, password</div>
+          </div>
+          <span class="material-icons chevron">chevron_right</span>
+        </div>
+        <div class="list-item" onclick="ripple(event, this); showSnack('Opening subscription…')">
+          <span class="material-icons">workspace_premium</span>
+          <div class="list-item-text">
+            <div class="list-item-title">Subscription</div>
+            <div class="list-item-sub">Free plan · Upgrade available</div>
+          </div>
+          <span class="material-icons chevron">chevron_right</span>
+        </div>
+        <div class="list-item" onclick="ripple(event, this); showSnack('Opening usage stats…')">
+          <span class="material-icons">bar_chart</span>
+          <div class="list-item-text">
+            <div class="list-item-title">Usage & Stats</div>
+            <div class="list-item-sub">14 tasks completed this month</div>
+          </div>
+          <span class="material-icons chevron">chevron_right</span>
+        </div>
+        <div class="list-item" onclick="ripple(event, this); showSnack('Signing out…')">
+          <span class="material-icons" style="color:var(--error)">logout</span>
+          <div class="list-item-text">
+            <div class="list-item-title" style="color:var(--error)">Sign Out</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="screen" id="screen-settings">
+      <div class="settings-content">
+
+        <div class="settings-section-header">Account</div>
+        <div class="settings-group">
+          <div class="settings-item" onclick="ripple(event, this); showSnack('Opening account…')">
+            <span class="material-icons">person_outline</span>
+            <div class="settings-item-text">
+              <div class="settings-item-title">Account</div>
+              <div class="settings-item-sub"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="e6878a839ec88ba6838b878f8ac885898b">[email&#160;protected]</a></div>
+            </div>
+            <span class="material-icons" style="color:var(--on-surface-3);font-size:18px">chevron_right</span>
+          </div>
+          <div class="settings-item" onclick="ripple(event, this); showSnack('Opening notifications…')">
+            <span class="material-icons">notifications_none</span>
+            <div class="settings-item-text">
+              <div class="settings-item-title">Notifications</div>
+              <div class="settings-item-sub">Reminders, updates, alerts</div>
+            </div>
+            <span class="material-icons" style="color:var(--on-surface-3);font-size:18px">chevron_right</span>
+          </div>
+        </div>
+
+        <div class="settings-section-header">Preferences</div>
+        <div class="settings-group">
+          <div class="settings-item">
+            <span class="material-icons">dark_mode</span>
+            <div class="settings-item-text">
+              <div class="settings-item-title">Dark Mode</div>
+            </div>
+            <div class="toggle" id="dark-mode-toggle" onclick="triggerDarkModeGlitch(this)"></div>
+          </div>
+          <div class="settings-item">
+            <span class="material-icons">sync</span>
+            <div class="settings-item-text">
+              <div class="settings-item-title">Auto-Sync</div>
+              <div class="settings-item-sub">Sync data in background</div>
+            </div>
+            <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="settings-item">
+            <span class="material-icons">lock_outline</span>
+            <div class="settings-item-text">
+              <div class="settings-item-title">App Lock</div>
+              <div class="settings-item-sub">Require biometrics on open</div>
+            </div>
+            <div class="toggle" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="settings-item" onclick="ripple(event, this); showSnack('Opening storage settings…')">
+            <span class="material-icons">storage</span>
+            <div class="settings-item-text">
+              <div class="settings-item-title">Storage & Cache</div>
+              <div class="settings-item-sub">47 MB used</div>
+            </div>
+            <span class="material-icons" style="color:var(--on-surface-3);font-size:18px">chevron_right</span>
+          </div>
+        </div>
+
+        <div class="settings-section-header">Support</div>
+        <div class="settings-group">
+          <div class="settings-item" onclick="ripple(event, this); showSnack('Opening help…')">
+            <span class="material-icons">help_outline</span>
+            <div class="settings-item-text"><div class="settings-item-title">Help & FAQ</div></div>
+            <span class="material-icons" style="color:var(--on-surface-3);font-size:18px">chevron_right</span>
+          </div>
+          <div class="settings-item" onclick="ripple(event, this); showSnack('Opening feedback…')">
+            <span class="material-icons">feedback</span>
+            <div class="settings-item-text"><div class="settings-item-title">Send Feedback</div></div>
+            <span class="material-icons" style="color:var(--on-surface-3);font-size:18px">chevron_right</span>
+          </div>
+        </div>
+
+        <div class="settings-section-header">Data</div>
+        <div class="settings-danger-group">
+          <div class="settings-item" onclick="ripple(event, this); showSnack('Opening export…')">
+            <span class="material-icons">download</span>
+            <div class="settings-item-text">
+              <div class="settings-item-title">Export Data</div>
+              <div class="settings-item-sub">Download a copy of your data</div>
+            </div>
+            <span class="material-icons" style="color:var(--on-surface-3);font-size:18px">chevron_right</span>
+          </div>
+          <div class="settings-item" id="reset-btn" onclick="ripple(event, this); openLoopDialog()">
+            <span class="material-icons" style="color:var(--error)">restart_alt</span>
+            <div class="settings-item-text">
+              <div class="settings-item-title" style="color:var(--error)">Reset App</div>
+              <div class="settings-item-sub">Clear all data and reset to default</div>
+            </div>
+          </div>
+          <div class="settings-item danger" id="delete-btn" onclick="ripple(event, this); confirmReset()" style="opacity:0;pointer-events:none;transition:opacity .3s;">
+            <span class="material-icons">delete_outline</span>
+            <div class="settings-item-text">
+              <div class="settings-item-title">Delete App Data</div>
+              <div class="settings-item-sub">Permanently remove all content</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-version">
+          Lost <span id="ver-settings">v2.4.1</span> (build <span id="ver-build">1138</span>)<br>
+          © 2024 Lost Technologies Inc.
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- MANUAL -->
+
+
+    <!-- ABOUT -->
+    <div class="screen" id="screen-about">
+      <div class="about-header">
+        <div class="about-app-icon"><span class="material-icons">apps</span></div>
+        <div class="about-app-name">Lost</div>
+        <div class="about-app-tagline">Productivity. Simplified.</div>
+      </div>
+      <div class="about-body">
+        <div class="about-meta">
+          <div class="about-meta-row">
+            <span class="about-meta-key">Version</span>
+            <span class="about-meta-val" id="about-ver">v2.4.1</span>
+          </div>
+          <div class="about-meta-row">
+            <span class="about-meta-key">Build</span>
+            <span class="about-meta-val" id="about-build">1138</span>
+          </div>
+          <div class="about-meta-row">
+            <span class="about-meta-key">Developer</span>
+            <span class="about-meta-val">Lost Technologies Inc.</span>
+          </div>
+          <div class="about-meta-row">
+            <span class="about-meta-key">Platform</span>
+            <span class="about-meta-val">Web 2.0 Compatible</span>
+          </div>
+        </div>
+
+        <div class="about-spinner-wrap">
+          <div class="about-loading-label">Loading app information…</div>
+          <div class="about-spinner" id="about-spinner"></div>
+          <div class="about-status" id="about-status"></div>
+        </div>
+
+        <button class="manual-btn primary" style="width:100%;margin-top:4px;" onclick="openSurvey()">
+          Take Our Survey
+        </button>
+
+      </div>
+    </div>
+
+  </div><!-- /screens -->
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="nav-tab active" id="tab-home" onclick="switchTab('home')">
+      <div class="nav-indicator"></div>
+      <span class="material-icons">home</span>
+      Home
+    </button>
+    <button class="nav-tab" id="tab-tasks" onclick="switchTab('tasks')">
+      <div class="nav-indicator"></div>
+      <span class="material-icons">check_circle_outline</span>
+      Tasks
+    </button>
+    <button class="nav-tab" id="tab-notes" onclick="switchTab('notes')">
+      <div class="nav-indicator"></div>
+      <span class="material-icons">note_alt</span>
+      Notes
+    </button>
+    <button class="nav-tab" id="tab-profile" onclick="switchTab('profile')">
+      <div class="nav-indicator"></div>
+      <span class="material-icons">person_outline</span>
+      Profile
+    </button>
+    <button class="nav-tab" id="tab-settings" style="opacity:0.35;pointer-events:none;" onmousedown="startSettingsHold()" ontouchstart="startSettingsHold()" onmouseup="cancelSettingsHold()" ontouchend="cancelSettingsHold()" onmouseleave="cancelSettingsHold()">
+      <div class="nav-indicator"></div>
+      <span class="material-icons">settings</span>
+      Settings
+    </button>
+  </nav>
+
+
+  <!-- Manual Overlay (full screen, traps user) -->
+  <div class="manual-overlay" id="manual-overlay">
+    <div class="manual-screen">
+      <div class="manual-header">
+        <div class="manual-header-label">Documentation</div>
+        <div class="manual-header-title">Lost – User Guide</div>
+        <div class="manual-header-sub"><span id="ver-manual">v2.4.1</span> · Official Support Document</div>
+      </div>
+      <div class="manual-body" id="manual-body">
+        <!-- content injected by JS -->
+      </div>
+      <div class="manual-page-dots" id="manual-dots"></div>
+      <div class="manual-footer" id="manual-footer">
+        <!-- buttons injected by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Drawer Overlay -->
+  <div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()">
+    <div class="drawer" onclick="event.stopPropagation()">
+      <div class="drawer-header">
+        <div class="drawer-app-icon"><span class="material-icons">apps</span></div>
+        <div class="drawer-app-name">Lost</div>
+        <div class="drawer-app-version" id="ver-drawer">v2.4.1</div>
+      </div>
+
+      <div style="padding: 8px;" id="drawer-nav-list">
+        <button class="drawer-nav-item active" onclick="switchTab('home'); closeDrawer()">
+          <span class="material-icons">home</span> Home
+        </button>
+        <button class="drawer-nav-item" onclick="switchTab('tasks'); closeDrawer()">
+          <span class="material-icons">check_circle_outline</span> Tasks
+        </button>
+        <button class="drawer-nav-item" onclick="switchTab('notes'); closeDrawer()">
+          <span class="material-icons">note_alt</span> Notes
+        </button>
+        <button class="drawer-nav-item" onclick="switchTab('profile'); closeDrawer()">
+          <span class="material-icons">person_outline</span> Profile
+        </button>
+        <div class="drawer-divider"></div>
+        <button class="drawer-nav-item" onclick="switchTab('settings'); closeDrawer()">
+          <span class="material-icons">settings</span> Settings
+        </button>
+        <button class="drawer-nav-item" onclick="closeDrawer(); showSnack('Help & FAQ coming soon.')">
+          <span class="material-icons">help_outline</span> Help
+        </button>
+        <button class="drawer-nav-item" onclick="closeDrawer(); switchTab('about')">
+          <span class="material-icons">info_outline</span> About
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snackbar -->
+  <div class="snackbar" id="snackbar">
+    <span id="snackbar-text"></span>
+    <span class="snackbar-action" onclick="hideSnack()">DISMISS</span>
+  </div>
+
+
+  <!-- Reset Progress Overlay -->
+  <div class="reset-overlay" id="reset-overlay">
+    <div class="reset-overlay-title" id="reset-overlay-title">Resetting app data…</div>
+    <div class="progress-track">
+      <div class="progress-bar" id="reset-progress-bar"></div>
+    </div>
+    <div class="reset-overlay-sub" id="reset-overlay-sub">Clearing cache and user data</div>
+    <div class="reset-error-box" id="reset-error-box">
+      <div class="reset-error-code">ERROR 0x0000LOST</div>
+      <div class="reset-error-msg">Reset failed. Data integrity cannot be verified. Core process terminated unexpectedly.</div>
+    </div>
+    <button class="reset-dismiss-btn" id="reset-dismiss-btn" onclick="dismissResetOverlay()">OK</button>
+  </div>
+
+  <!-- Terminal Panel -->
+  <div class="terminal-overlay" id="terminal-overlay">
+    <div class="terminal-bar">
+      <span class="terminal-bar-title">LOST // ERROR LOG v0.1</span>
+      <button class="terminal-close" onclick="closeTerminal()">[CLOSE]</button>
+    </div>
+    <div class="terminal-body" id="terminal-body">
+      <!-- populated by JS -->
+    </div>
+  </div>
+
+    <!-- Clue Flash -->
+  <div class="clue-flash" id="clue-flash"><div class="clue-char" id="clue-char"></div></div>
+
+  <!-- Void Screen -->
+  <div class="void-screen" id="void-screen">
+    <div class="void-cursor"></div>
+  </div>
+
+</div><!-- /device -->
+
+<!-- Reset Dialog -->
+  <div class="dialog-overlay" id="dialog-overlay">
+    <div class="dialog">
+      <div class="dialog-title" id="dialog-title">Reset app data?</div>
+      <div class="dialog-body" id="dialog-body">
+        This will permanently delete all tasks, notes, and preferences. This action cannot be undone.
+      </div>
+      <div class="dialog-actions">
+        <button class="dialog-btn text" id="dialog-cancel" onclick="closeDialog()">Cancel</button>
+        <button class="dialog-btn filled" id="dialog-confirm" onclick="confirmReset()">Reset</button>
+      </div>
+    </div>
+  </div>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // ─── All Game State (declared first to avoid temporal dead zone) ───
+  let gameStage = 0;
+  let resetAttempted = false;
+  let drawerOpenCount = 0;
+  let snackTimer;
+  let currentTab = 'home';
+  let voidVisits = 0;
+  let darkGlitchCount = 0;
+  let manualCurrentPage = 0;
+  let manualBackPresses = 0;
+  let manualLocked = false;
+  let accessibilityUnlocked = false;
+  let accessibilityUsed = false;
+  let currentVersion = 'v2.4.1';
+  let currentBuild = 1138;
+  let homeVisits = 0;
+  let fontScaleIndex = 0;
+  let loopIndex = 0;
+  let noteRead = false;
+  let hamburgerCount = 0;
+  let settingsUnlocked = false;
+  let noteTapCount = 0;
+  let noteGlitching = false;
+  let settingsHoldTimer = null;
+  let settingsHoldStart = null;
+
+  const bannerMessages = [
+    {
+      title: 'Critical Error Detected',
+      body: 'App data may be corrupted. To fix this, go to <strong>Settings → Reset</strong> or <strong>Delete App</strong>.'
+    },
+    {
+      title: 'Critical Error Persists',
+      body: 'Previous reset attempt logged. Core data integrity unresolved. Try <strong>Settings → Reset</strong> again or <strong>Delete App</strong>.'
+    }
+  ];
+
+  function updateBanner(index) {
+    const b = bannerMessages[Math.min(index, bannerMessages.length - 1)];
+    document.querySelector('.error-banner-title').textContent = b.title;
+    document.querySelector('.error-banner-body').innerHTML = b.body;
+  }
+
+  // ─── Clock ───
+  function updateClock() {
+    const now = new Date();
+    let h = now.getHours(), m = now.getMinutes();
+    document.getElementById('status-time').textContent =
+      `${h}:${m.toString().padStart(2,'0')}`;
+  }
+  updateClock();
+  setInterval(updateClock, 10000);
+
+  // ─── Tab Navigation ───
+  const tabs = ['home','tasks','notes','profile','settings','about'];
+
+  function switchTab(name) {
+    if (!tabs.includes(name)) return;
+    tabs.forEach(t => {
+      document.getElementById('screen-' + t).classList.remove('active');
+      const tabEl = document.getElementById('tab-' + t);
+      if (tabEl) tabEl.classList.remove('active');
+    });
+    document.getElementById('screen-' + name).classList.add('active');
+    const newTabEl = document.getElementById('tab-' + name);
+    if (newTabEl) newTabEl.classList.add('active');
+    currentTab = name;
+    // Version drift — track home visits after stage 1
+    if (name === 'home' && gameStage >= 1) {
+      homeVisits++;
+      updateVersionDisplay();
+    }
+    // About spinner
+    if (name === 'about') {
+      startAboutSpinner();
+    } else {
+      clearAboutSpinner();
+    }
+  }
+
+  function goToSettings() { switchTab('settings'); }
+
+  // ─── Drawer ───
+
+  function openDrawer() {
+    document.getElementById('drawer-overlay').classList.add('open');
+    if (gameStage >= 1) {
+      drawerOpenCount++;
+      shuffleDrawer();
+    }
+
+  }
+
+  function shuffleDrawer() {
+    const list = document.getElementById('drawer-nav-list');
+    if (!list) return;
+
+    // Collect all nav items (buttons and dividers)
+    const items = Array.from(list.children);
+
+    // Separate sticky items (first = Home, divider, last two = Help + About) from shuffleable
+    // We shuffle the middle block: Tasks, Notes, Profile, Settings, (Manual if present)
+    const shuffleables = items.filter(el =>
+      el.tagName === 'BUTTON' &&
+      el.id !== 'drawer-manual-btn' &&
+      !el.textContent.trim().startsWith('Home') &&
+      !el.textContent.trim().startsWith('Help') &&
+      !el.textContent.trim().startsWith('About')
+    );
+
+    // Fisher-Yates shuffle
+    for (let i = shuffleables.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      // swap in DOM by inserting before
+      const parent = shuffleables[i].parentNode;
+      const iNext = shuffleables[i].nextSibling;
+      const jNext = shuffleables[j].nextSibling;
+      parent.insertBefore(shuffleables[j], iNext);
+      parent.insertBefore(shuffleables[i], jNext);
+      [shuffleables[i], shuffleables[j]] = [shuffleables[j], shuffleables[i]];
+    }
+  }
+  function closeDrawer() {
+    document.getElementById('drawer-overlay').classList.remove('open');
+  }
+
+  // ─── Ripple ───
+  function ripple(e, el) {
+    const r = document.createElement('span');
+    const rect = el.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height) * 1.5;
+    r.className = 'ripple-effect card-ripple';
+    r.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size/2}px;top:${e.clientY - rect.top - size/2}px`;
+    el.appendChild(r);
+    setTimeout(() => r.remove(), 500);
+  }
+
+  document.querySelectorAll('.icon-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      const r = document.createElement('span');
+      r.className = 'ripple-effect';
+      r.style.cssText = `width:40px;height:40px;left:4px;top:4px`;
+      this.appendChild(r);
+      setTimeout(() => r.remove(), 500);
+    });
+  });
+
+  document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', function(e) {
+      const r = document.createElement('span');
+      const rect = this.getBoundingClientRect();
+      const size = 80;
+      r.className = 'ripple-effect card-ripple';
+      r.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size/2}px;top:${e.clientY - rect.top - size/2}px`;
+      this.appendChild(r);
+      setTimeout(() => r.remove(), 500);
+    });
+  });
+
+  // ─── Snackbar ───
+  function showSnack(msg) {
+    const sb = document.getElementById('snackbar');
+    document.getElementById('snackbar-text').textContent = msg;
+    sb.classList.add('show');
+    clearTimeout(snackTimer);
+    snackTimer = setTimeout(hideSnack, 2800);
+  }
+  function hideSnack() {
+    document.getElementById('snackbar').classList.remove('show');
+  }
+
+  // ─── Dialog ───
+  function openDialog() {
+    document.getElementById('dialog-overlay').classList.add('open');
+  }
+  function closeDialog() {
+    document.getElementById('dialog-overlay').classList.remove('open');
+  }
+
+  function confirmReset() {
+    closeDialog();
+    if (!resetAttempted) {
+      runResetAnimation();
+    }
+  }
+
+  // ─── Reset Animation ───
+  function runResetAnimation() {
+    resetAttempted = true;
+    const overlay  = document.getElementById('reset-overlay');
+    const bar      = document.getElementById('reset-progress-bar');
+    const sub      = document.getElementById('reset-overlay-sub');
+    const title    = document.getElementById('reset-overlay-title');
+    const errorBox = document.getElementById('reset-error-box');
+    const dismissBtn = document.getElementById('reset-dismiss-btn');
+
+    bar.style.transition = 'width .12s linear';
+    bar.style.width = '0%';
+    bar.classList.remove('error');
+    errorBox.classList.remove('visible');
+    dismissBtn.classList.remove('visible');
+    sub.textContent = 'Clearing cache and user data';
+    title.textContent = 'Resetting app data\u2026';
+    overlay.classList.add('visible');
+
+    const steps = [
+      { pct: 18, label: 'Clearing cache and user data',  delay: 500  },
+      { pct: 35, label: 'Removing task database',        delay: 1100 },
+      { pct: 52, label: 'Purging local storage',         delay: 1900 },
+      { pct: 67, label: 'Resetting preferences',         delay: 2800 },
+      { pct: 81, label: 'Verifying data integrity\u2026', delay: 3700 },
+      { pct: 94, label: 'Verifying data integrity\u2026', delay: 5000 },
+    ];
+
+    steps.forEach(({ pct, label, delay }) => {
+      setTimeout(() => {
+        bar.style.width = pct + '%';
+        sub.textContent = label;
+      }, delay);
+    });
+
+    // Stall at 94%, then fail
+    setTimeout(() => {
+      bar.classList.add('error');
+      bar.style.transition = 'width .05s linear';
+      title.textContent = 'Reset failed.';
+      sub.textContent = '';
+
+      let stutterCount = 0;
+      const stutter = setInterval(() => {
+        bar.style.width = (94 + (stutterCount % 2 === 0 ? -3 : 2)) + '%';
+        stutterCount++;
+        if (stutterCount > 7) {
+          clearInterval(stutter);
+          bar.style.width = '94%';
+          setTimeout(() => {
+            errorBox.classList.add('visible');
+            dismissBtn.classList.add('visible');
+          }, 300);
+        }
+      }, 130);
+    }, 6800);
+  }
+
+  function dismissResetOverlay() {
+    document.getElementById('reset-overlay').classList.remove('visible');
+    gameStage = 1;
+    updateBanner(1);
+    morphSettingsToStage1();
+    setTimeout(() => switchTab('home'), 350);
+  }
+
+  // ─── Stage 1: Mutate Settings ───
+  function morphSettingsToStage1() {
+    const resetBtn = document.getElementById('reset-btn');
+
+    // Disable Reset, visually grey out
+    resetBtn.style.opacity = '0.42';
+    resetBtn.style.pointerEvents = 'none';
+    resetBtn.querySelector('.settings-item-title').textContent = 'Reset (unavailable)';
+    resetBtn.querySelector('.settings-item-sub').textContent = 'Previous reset failed. See error log.';
+    const icon = resetBtn.querySelector('.material-icons');
+    icon.textContent = 'block';
+    icon.removeAttribute('style');
+    icon.style.color = 'var(--on-surface-3)';
+
+    // Inject [REDACTED] after Delete btn
+    const deleteBtn = document.getElementById('delete-btn');
+    const redacted = document.createElement('div');
+    redacted.className = 'settings-item redacted';
+    redacted.id = 'redacted-btn';
+    redacted.innerHTML = `
+      <span class="material-icons">terminal</span>
+      <div class="settings-item-text">
+        <div class="settings-item-title">[REDACTED]</div>
+      </div>
+    `;
+    redacted.addEventListener('click', function(e) {
+      ripple(e, this);
+      openVoid();
+    });
+    deleteBtn.after(redacted);
+    injectManualDrawerItem();
+  }
+
+  // ─── Void Screen ───
+  // The phrase the void screen is spelling out across visits
+  const voidPhrase = "YOU'RE STILL HERE";
+
+  function openVoid() {
+    const v = document.getElementById('void-screen');
+    const cursor = v.querySelector('.void-cursor');
+
+    // Reveal one character per visit after the first
+    if (voidVisits > 0) {
+      const charsToShow = voidPhrase.slice(0, voidVisits).split('');
+      cursor.style.display = 'none';
+      const revealed = document.createElement('div');
+      revealed.style.cssText = 'font-family:Roboto Mono,monospace;color:#33ff33;font-size:28px;font-weight:700;letter-spacing:4px;text-align:center;line-height:1.6;padding:20px;';
+      // Show chars with blinking last one
+      const done = charsToShow.slice(0, -1).join('');
+      const last = charsToShow[charsToShow.length - 1];
+      revealed.innerHTML = done + `<span style="animation:blink 1s step-end infinite">${last}</span>`;
+      v.appendChild(revealed);
+      setTimeout(() => { v.removeChild(revealed); cursor.style.display = ''; }, 3200);
+    }
+
+    voidVisits++;
+    v.classList.add('visible');
+    setTimeout(() => v.classList.remove('visible'), 3200);
+  }
+
+  // ─── Dark Mode Glitch ───
+  // The clue characters hidden in the inversion — fragments of the void phrase
+  const darkClueChars = ['Y','O','U','R','E'];
+
+  function triggerDarkModeGlitch(toggleEl) {
+    // If already inverted, snap back immediately
+    const device = document.querySelector('.device');
+    if (device.classList.contains('inverted')) {
+      snapBackDarkMode(toggleEl);
+      return;
+    }
+
+    toggleEl.classList.add('on');
+    const flash = document.getElementById('clue-flash');
+    const clueChar = document.getElementById('clue-char');
+
+    // Flash a clue char
+    const char = darkClueChars[darkGlitchCount % darkClueChars.length];
+    darkGlitchCount++;
+    clueChar.textContent = char;
+
+    // Invert
+    device.classList.add('inverted');
+
+    // Reveal delete button while inverted
+    const deleteBtn = document.getElementById('delete-btn');
+    if (deleteBtn && !resetAttempted) {
+      deleteBtn.style.opacity = '1';
+      deleteBtn.style.pointerEvents = 'auto';
+    }
+
+    // Flash clue char
+    setTimeout(() => flash.classList.add('show'), 400);
+    setTimeout(() => flash.classList.remove('show'), 1800);
+
+    // Snap back after 5s — enough time to find and tap Delete
+    darkModeTimer = setTimeout(() => {
+      snapBackDarkMode(toggleEl);
+    }, 5000);
+  }
+
+  let darkModeTimer = null;
+
+  function snapBackDarkMode(toggleEl) {
+    clearTimeout(darkModeTimer);
+    const device = document.querySelector('.device');
+    device.classList.remove('inverted');
+    toggleEl.classList.remove('on');
+
+    // Hide delete again
+    const deleteBtn = document.getElementById('delete-btn');
+    if (deleteBtn && !resetAttempted) {
+      deleteBtn.style.opacity = '0';
+      deleteBtn.style.pointerEvents = 'none';
+    }
+
+    showSnack('Dark mode not supported on this device.');
+  }
+
+  // ─── User Manual ───
+  const manualPages = [
+    {
+      label: 'Cover',
+      title: 'Lost – Quick Start Guide',
+      text: `<p>Thank you for using Lost.</p>
+<p>If you're seeing the red error banner on the home screen, the recommended solution is to navigate to <strong>Settings</strong> and select <strong>Reset</strong> or <strong>Delete App</strong>.</p>
+<p>This process is straightforward and should resolve most issues.</p>
+<p>Proceed to Page 2 for details on advanced troubleshooting.</p>`,
+      buttons: ['next']
+    },
+    {
+      label: 'Page 2 of 5',
+      title: 'Advanced Troubleshooting',
+      text: `<p>If the standard reset process has not resolved the issue, the problem may be environmental.</p>
+<p>Ensure the device has not been subject to unusual input patterns or prolonged inactivity.</p>
+<p>If the error persists, this may reflect an underlying configuration that requires further review.</p>
+<p>Continue to Page 3 for display-related considerations.</p>`,
+      buttons: ['back-to-1', 'next']
+    },
+    {
+      label: 'Page 3 of 5',
+      title: 'Display and Accessibility Notes',
+      text: `<p>The application interface may shift in response to user behaviour during this session.</p>
+<p>If elements appear smaller or repositioned, this is consistent with expected adaptive behaviour.</p>
+<p>These adjustments are logged and may affect future sessions.</p>
+<p>We recommend continuing to Page 4 before taking further action.</p>`,
+      buttons: ['back-close', 'next']
+    },
+    {
+      label: 'Page 4 of 5',
+      title: 'Common User Errors',
+      text: `<p>Many reported issues originate from user-initiated actions that conflict with normal app behaviour.</p>
+<p>Repeated navigation attempts have been identified as a contributing factor in the majority of cases.</p>
+<p>This is expected behaviour based on how the system interprets persistent input.</p>
+<p>The application is functioning correctly. To restore display settings, visit <strong>Settings → Accessibility</strong>.</p>
+<p>For a full record of system events, see the error log.<br><span class="error-log-link disabled" id="error-log-link-p4" title="Link unavailable. Restore display first." onclick="openTerminal()">&#x25B6; Check error log here</span></p>`,
+      buttons: ['back-to-3', 'next']
+    },
+    {
+      label: 'Page 5 of 5',
+      title: 'End of Manual',
+      text: `<p>You have reached the end of the guide.</p>
+<p>If the instructions were not clear, this may be due to display changes made during reading.</p>
+<p>We recommend reviewing the earlier pages before proceeding.</p>
+<p>No further assistance is provided here.</p>`,
+      buttons: ['back-broken']
+    }
+  ];
+
+
+  function openManual() {
+    manualCurrentPage = 0;
+    closeDrawer();
+    renderManualPage(0);
+    document.getElementById('manual-overlay').classList.add('visible');
+  }
+
+  function closeManual() {
+    document.getElementById('manual-overlay').classList.remove('visible');
+  }
+
+  // Font scale state
+  const fontScaleSteps = [1, 0.88, 0.76, 0.65, 0.55, 0.45, 0.36, 0.28, 0.20, 0.13];
+
+  function shrinkText() {
+    if (fontScaleIndex < fontScaleSteps.length - 1) {
+      fontScaleIndex++;
+      applyManualFontScale();
+    }
+    if (fontScaleIndex >= fontScaleSteps.length - 1) {
+      setTimeout(triggerShrinkPopup, 300);
+    }
+  }
+
+  function applyManualFontScale() {
+    const scale = fontScaleSteps[fontScaleIndex];
+
+    // Shrink manual sheet only
+    const manualScreen = document.querySelector('.manual-overlay .manual-screen');
+    if (manualScreen) {
+      manualScreen.style.transformOrigin = 'bottom center';
+      manualScreen.style.transform = `scale(${scale})`;
+    }
+
+    const link = document.getElementById('error-log-link-p4');
+    if (link) {
+      if (fontScaleIndex > 0) {
+        link.classList.add('disabled');
+        link.title = 'Link unavailable. Restore display first.';
+      } else {
+        link.classList.remove('disabled');
+      }
+    }
+  }
+
+  function triggerShrinkPopup() {
+    if (manualLocked) return;
+    manualLocked = true;
+
+    // Reuse dialog overlay
+    document.getElementById('dialog-title').textContent = 'Congratulations.';
+    document.getElementById('dialog-body').textContent =
+      'You have successfully reduced all text to an unreadable size. This was not recommended. The manual has been locked pending a display review.';
+    document.getElementById('dialog-cancel').style.display = 'none';
+    document.getElementById('dialog-confirm').textContent = 'OK';
+    document.getElementById('dialog-confirm').className = 'dialog-btn text';
+    document.getElementById('dialog-confirm').onclick = () => {
+      closeDialog();
+      closeManual();
+      lockManual();
+      injectAccessibilitySection();
+      switchTab('home');
+    };
+    openDialog();
+  }
+
+  function lockManual() {
+    const btn = document.getElementById('drawer-manual-btn');
+    if (btn) {
+      btn.style.opacity = '0.45';
+      btn.onclick = () => {
+        closeDrawer();
+        showSnack('The manual is unavailable. This is a consequence of your actions.');
+      };
+      // Update label
+      btn.innerHTML = '<span class="material-icons">menu_book</span> User Manual (locked)';
+    }
+  }
+
+  function injectAccessibilitySection() {
+    if (accessibilityUnlocked) return;
+    accessibilityUnlocked = true;
+
+    const settingsContent = document.querySelector('.settings-content');
+    const accessSection = document.createElement('div');
+    accessSection.id = 'accessibility-section';
+    accessSection.innerHTML = `
+      <div class="settings-section-header">Accessibility</div>
+      <div class="settings-group">
+        <div class="settings-item" id="restore-display-btn" onclick="restoreDisplay()">
+          <span class="material-icons" style="color:var(--primary)">text_fields</span>
+          <div class="settings-item-text">
+            <div class="settings-item-title" style="color:var(--primary)">Restore Display</div>
+            <div class="settings-item-sub">Reset text scaling to default</div>
+          </div>
+        </div>
+      </div>
+    `;
+    // Insert before version footer
+    const versionEl = settingsContent.querySelector('.settings-version');
+    settingsContent.insertBefore(accessSection, versionEl);
+  }
+
+  function restoreDisplay() {
+    if (accessibilityUsed) return;
+    accessibilityUsed = true;
+    fontScaleIndex = 0;
+
+    // App was never scaled — nothing to restore on device
+
+    // Remove accessibility section after delay
+    setTimeout(() => {
+      const sec = document.getElementById('accessibility-section');
+      if (sec) sec.remove();
+    }, 600);
+
+    // Re-open manual as locked page with active error log link
+    setTimeout(() => {
+      renderLockedManualPage();
+      const btn = document.getElementById('drawer-manual-btn');
+      if (btn) {
+        btn.style.opacity = '1';
+        btn.onclick = () => { closeDrawer(); renderLockedManualPage(); };
+        btn.innerHTML = '<span class="material-icons">menu_book</span> User Manual';
+      }
+    }, 700);
+
+    showSnack('Display restored. The manual situation is a separate matter.');
+  }
+
+  function renderLockedManualPage() {
+    const body = document.getElementById('manual-body');
+    const footer = document.getElementById('manual-footer');
+    const dots = document.getElementById('manual-dots');
+
+    dots.innerHTML = '';
+    body.innerHTML = `
+      <div class="manual-page-label">Access Restricted</div>
+      <div class="manual-title">Manual Unavailable</div>
+      <div class="manual-divider"></div>
+      <div class="manual-text">
+<p>The manual is unavailable due to repeated clicks despite multiple warnings.</p>
+        <span class="error-log-link" id="error-log-link" onclick="openTerminal()">&#x25B6; Check error log here</span>
+      </div>
+    `;
+    footer.innerHTML = `<button class="manual-btn secondary" onclick="closeManual()">&#x2190; Back</button>`;
+    document.getElementById('manual-overlay').classList.add('visible');
+  }
+
+  function renderManualPage(index) {
+    const page = manualPages[index];
+    if (!page) return;
+
+    const body   = document.getElementById('manual-body');
+    const footer = document.getElementById('manual-footer');
+    const dots   = document.getElementById('manual-dots');
+    const header = document.querySelector('.manual-header');
+
+    // X button — all pages except page 5
+    const existingX = document.getElementById('manual-close-x');
+    if (existingX) existingX.remove();
+    if (index < 4) {
+      const x = document.createElement('button');
+      x.id = 'manual-close-x';
+      x.style.cssText = 'position:absolute;top:12px;right:12px;background:transparent;border:none;color:var(--on-surface-3);font-size:22px;cursor:pointer;line-height:1;padding:4px;z-index:10;font-family:inherit;';
+      x.innerHTML = '&times;';
+      x.onclick = closeManual;
+      header.style.position = 'relative';
+      header.appendChild(x);
+    }
+
+    // Body content
+    body.innerHTML = `
+      <div class="manual-page-label">${page.label}</div>
+      <div class="manual-title">${page.title}</div>
+      <div class="manual-divider"></div>
+      <div class="manual-text">${page.text}</div>
+    `;
+
+    // Page dots (hidden on cover)
+    dots.innerHTML = index === 0 ? '' : Array.from({length: manualPages.length - 1}, (_, i) =>
+      `<div class="manual-dot ${i === index - 1 ? 'active' : ''}"></div>`
+    ).join('');
+
+    // Footer buttons
+    footer.innerHTML = '';
+
+    // BACK variants
+    if (page.buttons.includes('back-to-1')) {
+      const btn = document.createElement('button');
+      btn.className = 'manual-btn secondary';
+      btn.textContent = '← Back';
+      btn.onclick = () => { manualCurrentPage = 0; renderManualPage(0); };
+      footer.appendChild(btn);
+    }
+    if (page.buttons.includes('back-close')) {
+      const btn = document.createElement('button');
+      btn.className = 'manual-btn secondary';
+      btn.textContent = '← Back';
+      btn.onclick = closeManual;
+      footer.appendChild(btn);
+    }
+    if (page.buttons.includes('back-to-3')) {
+      const btn = document.createElement('button');
+      btn.className = 'manual-btn secondary';
+      btn.textContent = '← Back';
+      btn.onclick = () => { manualCurrentPage = 2; renderManualPage(2); };
+      footer.appendChild(btn);
+    }
+    if (page.buttons.includes('back-broken')) {
+      const btn = document.createElement('button');
+      btn.className = 'manual-btn secondary';
+      btn.textContent = '← Back';
+      btn.onclick = () => { manualBackPresses++; shrinkText(); };
+      footer.appendChild(btn);
+    }
+
+    // NEXT
+    if (page.buttons.includes('next')) {
+      const btn = document.createElement('button');
+      btn.className = 'manual-btn primary';
+      btn.textContent = 'Next →';
+      btn.onclick = () => { manualCurrentPage++; renderManualPage(manualCurrentPage); };
+      footer.appendChild(btn);
+    }
+  }
+
+    // Inject manual into drawer when Stage 1 is complete
+  function injectManualDrawerItem() {
+    const drawerDivider = document.querySelector('.drawer-divider');
+    const manualItem = document.createElement('button');
+    manualItem.className = 'drawer-nav-item';
+    manualItem.id = 'drawer-manual-btn';
+    manualItem.innerHTML = '<span class="material-icons">menu_book</span> User Manual';
+    manualItem.onclick = openManual;
+    drawerDivider.before(manualItem);
+  }
+
+
+  // ─── Version Drift ───
+
+  const versionSequence = [
+    { v: 'v2.4.1',    b: 1138,  note: null },
+    { v: 'v2.4.2',    b: 1139,  note: null },
+    { v: 'v2.4.3',    b: 1141,  note: null },
+    { v: 'v2.5.0',    b: 1155,  note: null },
+    { v: 'v2.5.0',    b: 1156,  note: null },
+    { v: 'v0.9.9',    b: 891,   note: 'Downgrade in progress due to repeated user error.' },
+    { v: 'v0.9.8',    b: 889,   note: 'Downgrade in progress due to repeated user error.' },
+    { v: 'pre-alpha', b: 12,    note: 'Stability issues detected. Reverting to early build.' },
+    { v: 'pre-alpha', b: 11,    note: 'Stability issues detected. Reverting to early build.' },
+  ];
+
+  function updateVersionDisplay() {
+    const idx = Math.min(homeVisits, versionSequence.length - 1);
+    const entry = versionSequence[idx];
+    currentVersion = entry.v;
+    currentBuild = entry.b;
+
+    const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setEl('ver-settings', entry.v);
+    setEl('ver-build', entry.b);
+    setEl('ver-drawer', entry.v);
+    setEl('ver-manual', entry.v);
+    setEl('about-ver', entry.v);
+    setEl('about-build', entry.b);
+
+    // Show downgrade note as snackbar if flagged
+    if (entry.note && homeVisits > 0) {
+      setTimeout(() => showSnack(entry.note), 800);
+    }
+  }
+
+
+
+
+  // ─── Terminal Panel ───
+  const terminalLog = [
+    { type: 'dim',   text: '─────────────────────────────────' },
+    { type: 'info',  text: 'LOST SYSTEM LOG // SESSION 0x4F1A' },
+    { type: 'dim',   text: '─────────────────────────────────' },
+    { type: 'dim',   text: '[08:41:02] Boot sequence initiated' },
+    { type: 'dim',   text: '[08:41:02] Loading user profile... OK' },
+    { type: 'dim',   text: '[08:41:03] Integrity check... FAILED' },
+    { type: 'error', text: '[08:41:03] ERR 0x0000LOST: Core data unverifiable' },
+    { type: 'warn',  text: '[08:41:03] Fallback mode engaged' },
+    { type: 'dim',   text: '[08:41:04] UI render... OK' },
+    { type: 'dim',   text: '──────────────' },
+    { type: 'warn',  text: '[session] Reset attempted by user' },
+    { type: 'error', text: '[session] Reset aborted at 94% — integrity fault' },
+    { type: 'warn',  text: '[session] Reset logged. Button disabled.' },
+    { type: 'dim',   text: '──────────────' },
+    { type: 'warn',  text: '[session] Manual accessed' },
+    { type: 'warn',  text: '[session] Repeated back navigation detected' },
+    { type: 'error', text: '[session] Display scaling modified by user input' },
+    { type: 'error', text: '[session] Manual locked — display review pending' },
+    { type: 'dim',   text: '──────────────' },
+    { type: 'dim',   text: '[session] Awaiting user action...' },
+    { type: 'info',  text: '> _' },
+  ];
+
+  function openTerminal() {
+    const overlay = document.getElementById('terminal-overlay');
+    const body = document.getElementById('terminal-body');
+    body.innerHTML = '';
+
+    // Render lines with staggered delay for effect
+    terminalLog.forEach((line, i) => {
+      setTimeout(() => {
+        const el = document.createElement('div');
+        el.className = 'terminal-line ' + line.type;
+        el.textContent = line.text;
+        body.appendChild(el);
+        body.scrollTop = body.scrollHeight;
+      }, i * 45);
+    });
+
+    overlay.classList.add('visible');
+  }
+
+  function closeTerminal() {
+    document.getElementById('terminal-overlay').classList.remove('visible');
+  }
+
+
+  // ─── Settings Unlock ───
+  // Glitch text snippets — flash before real content
+  const noteGlitchLines = [
+    ['ERR_READ', 'File corrupted.', '???'],
+    ['Loading...', 'null', 'undefined'],
+    ['App issues', '——', 'retrieving...'],
+  ];
+
+  function openSecretNote() {
+    if (noteGlitching) return;
+    noteTapCount++;
+
+    const overlay = document.getElementById('note-modal-overlay');
+    const title   = document.getElementById('note-modal-dyn-title');
+    const body    = document.getElementById('note-modal-dyn-body');
+
+    if (noteTapCount < 3) {
+      // Glitchy partial reveal
+      noteGlitching = true;
+      overlay.classList.add('visible');
+
+      const glitch = noteGlitchLines[(noteTapCount - 1) % noteGlitchLines.length];
+
+      // Flash wrong content
+      if (title) title.textContent = glitch[0];
+      if (body)  body.innerHTML = glitch[1];
+
+      setTimeout(() => {
+        if (title) title.textContent = glitch[2];
+        if (body)  body.innerHTML = '...';
+      }, 200);
+
+      setTimeout(() => {
+        if (title) title.textContent = 'App issues';
+        if (body)  body.innerHTML = noteTapCount === 1
+          ? 'This app has serious bugs.'
+          : 'This app has serious bugs.<br><br>Settings is currently unavailable.';
+      }, 500);
+
+      // Flicker
+      setTimeout(() => overlay.classList.remove('visible'), 900);
+      setTimeout(() => overlay.classList.add('visible'), 1050);
+      setTimeout(() => overlay.classList.remove('visible'), 1150);
+      setTimeout(() => {
+        overlay.classList.remove('visible');
+        noteGlitching = false;
+      }, 1300);
+
+    } else {
+      // Third tap — full note, glitchy entry then settles
+      noteGlitching = true;
+      noteRead = true;
+      overlay.classList.add('visible');
+
+      if (title) title.textContent = 'ERR_READ';
+      if (body)  body.innerHTML = 'null';
+
+      setTimeout(() => {
+        if (title) title.textContent = 'App issues';
+        if (body)  body.innerHTML = '...';
+      }, 150);
+
+      setTimeout(() => overlay.classList.remove('visible'), 300);
+      setTimeout(() => overlay.classList.add('visible'), 420);
+
+      setTimeout(() => {
+        if (title) title.textContent = 'App issues';
+        if (body) body.innerHTML = `
+          This app has serious bugs.<br><br>
+          Settings is currently unavailable.<br><br>
+          To open Settings: <strong>press and hold</strong> the Settings button for 2 seconds.
+        `;
+        noteGlitching = false;
+      }, 550);
+    }
+  }
+
+  function closeSecretNote() {
+    document.getElementById('note-modal-overlay').classList.remove('visible');
+  }
+
+  function updateNoteCounter() {
+    const el = document.getElementById('note-counter');
+    if (el) el.textContent = hamburgerCount + ' / 3';
+  }
+
+  function unlockSettings() {
+    if (settingsUnlocked) return;
+    settingsUnlocked = true;
+    const tabBtn = document.getElementById('tab-settings');
+    const gearBtn = document.getElementById('settings-gear-btn');
+    if (tabBtn) { tabBtn.style.opacity = ''; tabBtn.style.pointerEvents = ''; }
+    if (gearBtn) { gearBtn.style.opacity = ''; gearBtn.style.pointerEvents = ''; }
+  }
+
+
+  // ─── Settings Long Press ───
+  function startSettingsHold() {
+    if (!noteRead) return;
+    settingsHoldStart = Date.now();
+    settingsHoldTimer = setTimeout(() => {
+      unlockSettings();
+      switchTab('settings');
+      settingsHoldTimer = null;
+    }, 2000);
+  }
+
+  function cancelSettingsHold() {
+    if (settingsHoldTimer) {
+      clearTimeout(settingsHoldTimer);
+      settingsHoldTimer = null;
+      // If they held a bit but not enough — nudge them
+      if (settingsHoldStart && Date.now() - settingsHoldStart > 300) {
+        showSnack('Keep holding.');
+      }
+      settingsHoldStart = null;
+    }
+  }
+
+  // ─── Expose functions to global scope for HTML onclick handlers ───
+  window.switchTab = switchTab;
+  window.openDrawer = openDrawer;
+  window.closeDrawer = closeDrawer;
+  window.ripple = ripple;
+  window.showSnack = showSnack;
+  window.hideSnack = hideSnack;
+  window.openDialog = openDialog;
+  window.closeDialog = closeDialog;
+  window.confirmReset = confirmReset;
+  window.dismissResetOverlay = dismissResetOverlay;
+  window.triggerDarkModeGlitch = triggerDarkModeGlitch;
+  window.openManual = openManual;
+  window.closeManual = closeManual;
+  window.openTerminal = openTerminal;
+  window.closeTerminal = closeTerminal;
+  window.restoreDisplay = restoreDisplay;
+  window.openVoid = openVoid;
+  window.openSecretNote = openSecretNote;
+  window.closeSecretNote = closeSecretNote;
+  window.startSettingsHold = startSettingsHold;
+  window.cancelSettingsHold = cancelSettingsHold;
+
+
+  // ─── Are You Sure Loop ───
+  const loopMessages = [
+    { title: 'Reset app data?',           body: 'This will permanently delete all tasks, notes, and preferences. This action cannot be undone.' },
+    { title: 'Are you sure?',             body: 'All data will be lost. This includes notes, tasks, and account preferences. There is no recovery option.' },
+    { title: 'Please confirm.',           body: 'You are about to reset the application. This is irreversible. Are you absolutely certain?' },
+    { title: 'This cannot be undone.',    body: 'Once reset, your data will be permanently removed. We strongly advise against this. Continue?' },
+    { title: 'Last chance.',              body: 'Proceeding will initiate a full data wipe. The application will return to its default state. Confirm?' },
+    { title: 'Are you still sure?',       body: 'You have confirmed multiple times. We want to make sure this is intentional. Reset anyway?' },
+    { title: 'Just checking.',            body: 'This feels like it might be a mistake. Most users cancel at this point. Do you wish to continue?' },
+    { title: 'Okay.',                     body: 'We respect your decision. However, the system requires one final confirmation before proceeding.' },
+    { title: 'Final confirmation.',       body: 'This is the last step. After this, the reset will begin. Tap Confirm to proceed.' },
+    { title: 'Confirm to proceed.',       body: 'The system is ready. All data will be cleared. This is your final opportunity to cancel.' },
+    { title: 'Ready to reset.',           body: 'Everything is in order. Tap Confirm and the process will begin immediately.' },
+    { title: 'Almost there.',             body: 'One more confirmation required by system policy. We apologize for the inconvenience.' },
+    { title: 'System policy.',            body: 'Regulatory requirements mandate an additional confirmation step. Please confirm to continue.' },
+    { title: 'Additional step required.', body: 'Due to recent activity, an extra verification is needed. This is for your protection.' },
+    { title: 'Verification required.',    body: 'Your session requires re-confirmation. Please confirm the reset one more time.' },
+  ];
+  function openLoopDialog() {
+    const msg = loopMessages[Math.min(loopIndex, loopMessages.length - 1)];
+    document.getElementById('dialog-title').textContent = msg.title;
+    document.getElementById('dialog-body').textContent = msg.body;
+    document.getElementById('dialog-cancel').style.display = '';
+    document.getElementById('dialog-cancel').textContent = 'Cancel';
+    document.getElementById('dialog-cancel').onclick = () => { closeDialog(); loopIndex = 0; };
+    document.getElementById('dialog-confirm').textContent = 'Confirm';
+    document.getElementById('dialog-confirm').className = 'dialog-btn filled';
+    document.getElementById('dialog-confirm').onclick = () => {
+      loopIndex++;
+      // Swap button labels occasionally to gaslight
+      if (loopIndex === 4) {
+        document.getElementById('dialog-cancel').textContent = 'Continue';
+        document.getElementById('dialog-confirm').textContent = 'Cancel';
+        document.getElementById('dialog-confirm').onclick = () => { loopIndex++; openLoopDialog(); };
+        document.getElementById('dialog-cancel').onclick = () => { loopIndex++; openLoopDialog(); };
+      } else {
+        openLoopDialog();
+      }
+    };
+    openDialog();
+  }
+
+
+  // ─── About Spinner ───
+  const aboutStatusMessages = [
+    { delay: 2200,  msg: '' },
+    { delay: 3800,  msg: 'Connecting…' },
+    { delay: 5500,  msg: '' },
+    { delay: 7000,  msg: 'Loading now…' },
+    { delay: 9000,  msg: '' },
+    { delay: 11000, msg: 'Almost ready…' },
+    { delay: 13500, msg: '' },
+    { delay: 15000, msg: 'Please wait.' },
+    { delay: 18000, msg: '' },
+    { delay: 20000, msg: 'Loading now…' },
+    { delay: 23000, msg: '' },
+  ];
+
+  let aboutSpinnerInterval = null;
+  let aboutSpinnerTimeout = null;
+  let aboutVisits = 0;
+
+  function startAboutSpinner() {
+    aboutVisits++;
+    const spinner = document.getElementById('about-spinner');
+    const status  = document.getElementById('about-status');
+    if (!spinner) return;
+
+    // Clear any previous
+    clearAboutSpinner();
+
+    // Reset
+    spinner.classList.remove('reverse');
+    status.textContent = '';
+
+    // Schedule status messages and direction flips
+    const schedule = [];
+
+    // Direction reversal — random timing each visit
+    const flip1 = 1500 + Math.random() * 2000;
+    const flip2 = flip1 + 2500 + Math.random() * 2000;
+    const flip3 = flip2 + 3000 + Math.random() * 1500;
+
+    schedule.push(setTimeout(() => spinner.classList.add('reverse'), flip1));
+    schedule.push(setTimeout(() => spinner.classList.remove('reverse'), flip2));
+    schedule.push(setTimeout(() => spinner.classList.add('reverse'), flip3));
+
+    // Status messages
+    aboutStatusMessages.forEach(({ delay, msg }) => {
+      schedule.push(setTimeout(() => {
+        status.style.opacity = '0';
+        setTimeout(() => {
+          status.textContent = msg;
+          status.style.opacity = '1';
+        }, 200);
+      }, delay));
+    });
+
+    // Loop — restart after 24s
+    aboutSpinnerTimeout = setTimeout(() => startAboutSpinner(), 24000);
+    aboutSpinnerInterval = schedule;
+  }
+
+  function clearAboutSpinner() {
+    if (aboutSpinnerTimeout) clearTimeout(aboutSpinnerTimeout);
+    if (aboutSpinnerInterval) aboutSpinnerInterval.forEach(t => clearTimeout(t));
+    aboutSpinnerInterval = null;
+    aboutSpinnerTimeout = null;
+  }
+
+
+
+
+  // ─── Survey ───
+  const surveyQuestions = [
+    {
+      q: 'How would you rate your experience with Lost so far?',
+      sub: 'Select one option.',
+      options: ['Excellent', 'Good', 'Fair', 'Poor', 'I have no opinion']
+    },
+    {
+      q: 'Which features do you use most often?',
+      sub: 'Select one option.',
+      options: ['Tasks', 'Notes', 'Daily Goal', 'Settings', 'None of the above']
+    },
+    {
+      q: 'How likely are you to recommend Lost to a colleague?',
+      sub: 'Select one option.',
+      options: ['Very likely', 'Somewhat likely', 'Unlikely', 'I would not', 'Unsure']
+    },
+    {
+      q: "Is there anything else you'd like to share?",
+      sub: 'Optional.',
+      options: null  // text area
+    }
+  ];
+
+  let surveyAnswers = {};
+
+  function openSurvey() {
+    surveyAnswers = {};
+    const body = document.getElementById('survey-body');
+    if (body) body.innerHTML = '';
+    renderSurvey();
+    document.getElementById('survey-overlay').classList.add('visible');
+  }
+
+  function closeSurvey() {
+    document.getElementById('survey-overlay').classList.remove('visible');
+    // Reset state — re-render after transition
+    setTimeout(() => {
+      surveyAnswers = {};
+      renderSurvey();
+    }, 350);
+  }
+
+  function renderSurvey() {
+    const body = document.getElementById('survey-body');
+    if (!body) return;
+    body.innerHTML = '';
+
+    surveyQuestions.forEach((q, qi) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'survey-question';
+
+      const label = document.createElement('div');
+      label.className = 'survey-q-label';
+      label.textContent = (qi + 1) + '. ' + q.q;
+      wrap.appendChild(label);
+
+      if (q.sub) {
+        const sub = document.createElement('div');
+        sub.className = 'survey-q-sub';
+        sub.textContent = q.sub;
+        wrap.appendChild(sub);
+      }
+
+      if (q.options) {
+        const opts = document.createElement('div');
+        opts.className = 'survey-options';
+        q.options.forEach(opt => {
+          const el = document.createElement('div');
+          el.className = 'survey-option' + (surveyAnswers[qi] === opt ? ' selected' : '');
+          el.innerHTML = '<div class="survey-option-dot"></div>' + opt;
+          el.onclick = () => selectSurveyOption(qi, opt, el, opts);
+          opts.appendChild(el);
+        });
+        wrap.appendChild(opts);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.className = 'survey-textarea';
+        ta.placeholder = 'Your feedback here…';
+        ta.value = surveyAnswers[qi] || '';
+        ta.oninput = () => { surveyAnswers[qi] = ta.value; updateSurveySubmit(); };
+        wrap.appendChild(ta);
+      }
+
+      body.appendChild(wrap);
+    });
+
+    updateSurveySubmit();
+  }
+
+  function selectSurveyOption(qi, opt, el, container) {
+    container.querySelectorAll('.survey-option').forEach(o => o.classList.remove('selected'));
+    el.classList.add('selected');
+    surveyAnswers[qi] = opt;
+    updateSurveySubmit();
+  }
+
+  function updateSurveySubmit() {
+    const btn  = document.getElementById('survey-submit');
+    const note = document.getElementById('survey-note');
+    if (!btn || !note) return;
+
+    const answered = [0,1,2].filter(i => surveyAnswers[i]).length;
+
+    if (answered >= 3) {
+      // All done — button just disappears silently
+      btn.style.display = 'none';
+      note.textContent = '';
+    } else {
+      btn.style.display = '';
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      note.textContent = '';
+    }
+  }
+
+  function handleSurveySubmit() {
+    // Tapped submit without completing — show warning
+    const answered = [0,1,2].filter(i => surveyAnswers[i]).length;
+    if (answered < 3) {
+      const note = document.getElementById('survey-note');
+      if (note) {
+        note.style.color = 'var(--error)';
+        note.textContent = 'Please complete all questions before submitting.';
+      }
+    }
+  }
+
+  window.openSurvey = openSurvey;
+  window.closeSurvey = closeSurvey;
+  window.handleSurveySubmit = handleSurveySubmit;
+  window.openLoopDialog = openLoopDialog;
+
+});
+</script>
+  <!-- Secret Note Modal -->
+  <div class="note-modal-overlay" id="note-modal-overlay">
+    <div class="note-modal">
+      <div class="note-modal-header">
+        <div>
+          <div class="note-modal-title" id="note-modal-dyn-title">App issues</div>
+          <div class="note-modal-date">Mar 2</div>
+        </div>
+        <button class="note-modal-close" onclick="closeSecretNote()">&times;</button>
+      </div>
+      <div class="note-modal-body" id="note-modal-dyn-body">
+        This app has serious bugs.
+      </div>
+    </div>
+  </div>
+
+  <!-- Survey Overlay -->
+  <div class="survey-overlay" id="survey-overlay">
+    <div class="survey-sheet">
+      <div class="survey-header">
+        <div class="survey-title">Quick Feedback</div>
+        <button class="survey-close" onclick="closeSurvey()">&times;</button>
+      </div>
+      <div class="survey-body" id="survey-body"></div>
+      <div class="survey-footer">
+        <button class="survey-submit" id="survey-submit" onclick="handleSurveySubmit()">Submit</button>
+        <div class="survey-submit-note" id="survey-note"></div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
